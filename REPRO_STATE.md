@@ -1,6 +1,6 @@
 # 复现状态（会话恢复用）
 
-更新时间: 2026-11-05 21:30 (Asia/Shanghai)
+更新时间: 2026-11-05 21:45 (Asia/Shanghai)
 论文: Learning Obfuscations Of LLM Embedding Sequences: Stained Glass Transform (arXiv:2506.09452v1)
 论文源: `2506.09452v1.pdf`；代码源: 无官方实现（原仓库为空），本仓库即复现实现
 当前阶段: Phase R（报告完成，门禁回归）
@@ -28,9 +28,13 @@
 - Table 3（PUPA）：`results/pupa_*.json`（NN only）。
 - 论文缺陷：F29（Eq 6 假上界）、F30（MI 非 MI）、F31（Eq 12 发散）、F32（降规模 Utility 未复现）。
 
+**回归结果**
+- `./repro.sh gates`：12/12 PASS（M0–M10，含 M8a/M8b）。
+- `pytest`：106 passed / 3 xfailed。
+- 远端仓库已推送（`origin/main`，历史已清理掉误入库的 .venv-lm，仓库 1.2MB）。
+
 **下一动作**
-1. 跑 `./repro.sh gates` 全量回归（M0→M10），确认无回退。
-2. `git commit && git push`（每节点已提交，见 git log）。
+1. 如需更高复现度：用论文级预算重训（F32），或在 A100 集群上执行 `experiments/run_large_models.py` 生成的 `torchrun` 命令（D4）。
 3. 若要继续提高复现度：按论文级预算重训（更多步数/数据）→ Table 1 的 Utility 列（F32）；有 A100 集群时跑 M9 脚本。
 
 **阻塞项**
