@@ -1,0 +1,106 @@
+{
+  "gate": "m1",
+  "name": "theory",
+  "module_entry": "Eq.(1),(2),(4),(5),(6),(7); Prop 3.3; Cor 3.4",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-eq1",
+      "expected": "bitwise equal",
+      "actual": "max|diff|=0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-indep-cov",
+      "expected": "rel_err < 2%",
+      "actual": "0.173%",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-determinism",
+      "expected": "bitwise equal",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-prop33",
+      "expected": "min KS p > 0.01",
+      "actual": "min p=0.3223",
+      "pass": true,
+      "detail": "p_values=[0.3223, 0.6095, 0.3854]"
+    },
+    {
+      "id": "c-cor34",
+      "expected": "3 个投影均未拒绝（crit-D > 0）",
+      "actual": "crit-D=[0.00379, 0.00562, 0.00709]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-gmm-pdf-normalized",
+      "expected": "1 ± 1e-3",
+      "actual": "1.000000",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-eq5-eq7",
+      "expected": "rel_err < 2%",
+      "actual": "0.118%",
+      "pass": true,
+      "detail": "mi_mc=0.813993 quad-cond=0.814955"
+    },
+    {
+      "id": "c-bound6-true",
+      "expected": "h_quad <= sum_i w_i h_i + H(w) (all 20)",
+      "actual": "max_gap=-3.024e-01",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-bound6-counterexample",
+      "expected": "h_quad - upper_bound > 0.1",
+      "actual": "0.6931 nats (h=0.9608, ub=0.2676)",
+      "pass": true,
+      "detail": "F29：Eq (6) 字面形式不是上界；正确上界需 +H(w)"
+    },
+    {
+      "id": "c-pac-monotone",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": "delta_kl(1)=11.761784, log(1/delta0)=11.761784"
+    },
+    {
+      "id": "c-pac-table",
+      "expected": "每一行 |Δ| <= 0.15pp",
+      "actual": "worst=0.113pp",
+      "pass": true,
+      "detail": "MI=1.11->12.67% (论文 12.69%, Δ=0.02pp); MI=1.48->16.37% (论文 16.39%, Δ=0.02pp); MI=1.91->20.56% (论文 20.56%, Δ=0.00pp); MI=22.19->100.00% (论文 100.0%, Δ=0.00pp); MI=0.26->3.50% (论文 3.54%, Δ=0.04pp); MI=0.28->3.74% (论文 3.74%, Δ=0.00pp); MI=0.23->3.14% (论文 3.03%, Δ=0.11pp)"
+    },
+    {
+      "id": "c-pac-invert-consistency",
+      "expected": "< 1e-8",
+      "actual": "5.673e-10",
+      "pass": true,
+      "detail": "checked MI=[1.11, 1.48, 1.91, 0.26, 0.28, 0.23]"
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:12:03+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "torch": "2.15.0"
+  }
+}
