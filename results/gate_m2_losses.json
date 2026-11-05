@@ -1,0 +1,126 @@
+{
+  "gate": "m2",
+  "name": "losses",
+  "module_entry": "Alg.1; Eq.(8)-(13); L_U",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mi-pair",
+      "expected": "12.442734604901",
+      "actual": "12.442734604901",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mi-full",
+      "expected": "16.604071814836",
+      "actual": "16.604071814836",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mi-half",
+      "expected": "6.221367302450",
+      "actual": "6.221367302450",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mi-grad",
+      "expected": "finite & nonzero",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-acs",
+      "expected": 0.6666666666666666,
+      "actual": 0.666666666667,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-acs-torch",
+      "expected": true,
+      "actual": "max|diff|=0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-bcs",
+      "expected": -0.6666666666666666,
+      "actual": -0.666666666667,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mnp",
+      "expected": 0.5,
+      "actual": 0.5,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-cge",
+      "expected": "-0.693147180560",
+      "actual": "-0.693147180560",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-cge-no-mean",
+      "expected": "d/dmu == 0",
+      "actual": 0.0,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-eq11",
+      "expected": 12.0,
+      "actual": 12.0,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility",
+      "expected": "1.986265965720",
+      "actual": "1.986265965720",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility-identity",
+      "expected": "H(p)=1.312965545474",
+      "actual": "1.312965545474",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility-min-at-identity",
+      "expected": "perturbed >= identity",
+      "actual": "2.148542 >= 1.312966",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility-mask",
+      "expected": "2.057331742157",
+      "actual": "2.057331742157",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:17:39+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

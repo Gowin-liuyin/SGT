@@ -154,8 +154,14 @@ def main() -> int:
     p = torch.softmax(zc, dim=-1)
     exp_u = float(-(p * torch.log_softmax(zs, dim=-1)).sum(-1).mean())
     g.check("c-utility", expected=f"{exp_u:.12f}", actual=f"{got_u:.12f}", passed=abs(got_u - exp_u) < 1e-9)
+    # 注：L_U 是交叉熵 H(p_clean, p_sgt)，同分布时等于 H(p_clean) 而非 0（论文原语义）
     same = float(L.utility_loss(zc, zc))
-    g.check("c-utility-identity", expected="< 1e-6", actual=f"{same:.3e}", passed=abs(same) < 1e-6)
+    ent = float(-(p * torch.log(p)).sum(-1).mean())
+    g.check("c-utility-identity", expected=f"H(p)={ent:.12f}", actual=f"{same:.12f}",
+            passed=abs(same - ent) < 1e-9)
+    pert = float(L.utility_loss(zc, zc + 2.0 * torch.randn(zc.shape, generator=gen)))
+    g.check("c-utility-min-at-identity", expected="perturbed >= identity", actual=f"{pert:.6f} >= {same:.6f}",
+            passed=pert >= same - 1e-12)
 
     # mask：被 mask 的位置不影响
     m2 = torch.ones(2, 3, dtype=torch.bool)
