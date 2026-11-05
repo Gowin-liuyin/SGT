@@ -56,7 +56,7 @@ $$\tilde x_{1:T}=x_{1:T}+\mu_\theta(x_{1:T})_{1:T}+\Sigma_\theta(x_{1:T})_{1:T}^
 
 实现要求：
 
-- $\Sigma^{1/2}$ 为逐维开方（$\Sigma$ 对角）：`xt = x + mu + sqrt(sigma) * u`。
+- $\Sigma^{1/2}$ 为逐维开方（$\Sigma$ 对角）：若模型输出 $\log\sigma^2$，先 `sigma = exp(0.5*log_sigma2)`，再 `xt = x + mu + sigma * u`（`sample_sgt` 的 `sigma` 参数=标准差）。
 - $u$ 逐 token 独立（$T$ 个独立 $d$ 维标准正态）。
 - 训练/推理的采样必须支持**显式传入 $u$**（用于门禁复算）与 `torch.Generator`（可复现）。
 - 数值：$\sigma$ 由 `softplus(log_sigma2)` 或 `exp(clamp(...))` 保证 $>0$；下界 `sigma_min=1e-6`。
@@ -175,7 +175,7 @@ $$\Delta_{KL}(\delta)=\delta\log\frac{\delta}{\delta_0}+(1-\delta)\log\frac{1-\d
 ## 6. 代码布局与接口（实现契约）
 
 ```
-src/sgt/sampling.py   sample_sgt(x, mu, log_sigma2, generator) -> xt          # Eq (1)
+src/sgt/sampling.py   sample_sgt(x, mu, sigma, *, u=None, generator=None) -> xt   # Eq (1)，sigma 为标准差
 src/sgt/model.py      SGTModel(d, ...) .forward(x[B,T,d]) -> (mu, log_sigma2)
 src/sgt/losses.py     mi_loss(...), abs_cos_loss, median_norm_loss,
                       comp_entropy_loss, cos_sim_loss, obfuscation_loss(...)

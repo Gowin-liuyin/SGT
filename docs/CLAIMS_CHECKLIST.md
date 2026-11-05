@@ -10,7 +10,7 @@
 | C1 | p.3–4 Def 3.1, Prop 3.3 | Affine SGT 的条件密度是 $G(\cdot;\alpha(x))$ 的平移；采样 $\tilde x=x+u$ 精确成立 | — | UNKNOWN | 计划 `results/gate_m1_theory.json` |
 | C2 | p.4 Cor 3.4, Eq (2) | 数据集上 $\tilde X$ 服从 GMM，均值 $\mu_\theta(x_i)+x_i$，权重 $\omega_i=P_X(x_i)$ | — | UNKNOWN | 同上（c-cor34） |
 | C3 | p.5 Eq (4) | $\Delta_{KL}(\delta)\le \mathrm{MI}(X;\tilde X)$，$ \delta_0$ 为先验成功率 $1-\delta_0$ 的补 | — | UNKNOWN | `gate_m1_theory.json`（c-pac-*），并用于反解 Table 1/2 的 PAC-Adv |
-| C4 | p.5–6 Eq (6) | GMM 熵的上界 = 分量熵的加权和 $h(\tilde x)\le\sum_i\omega_i h_y(\cdot)$ | — | UNKNOWN | `gate_m1_theory.json`（c-bound6） |
+| C4 | p.5–6 Eq (6) | GMM 熵的上界 = 分量熵的加权和 $h(\tilde x)\le\sum_i\omega_i h_y(\cdot)$ | 反例：$w=[.5,.5],\mu=\pm5,\sigma^2=0.1$ 时 $h_{\text{mix}}-\sum\omega_i h_i=0.6931=H(\omega)$；正确上界为 $+H(\omega)$（分量熵加权和实为**下界**，熵的凹性） | **FALSIFIED** | `results/gate_m1_theory.json`（c-bound6-counterexample / c-bound6-true）；F29 |
 | C5 | p.6 Eq (7) | $\mathrm{MI}=\mathbb E[-\log\mathbb E_X G]-\mathbb E_X[h_z]$ | — | UNKNOWN | `gate_m2_losses.json`（c-eq7） |
 | C6 | p.6 Prop 5.1, Eq (8) | 两批样本间 MI 的 MC 近似有闭式 | — | UNKNOWN | `gate_m2_losses.json`（c-eq8） |
 | C7 | p.5 Eq (4) 反解 | PAC-Adv 可由 MI 反解；$N=128256$ 时 Table 1/2 的 MI→PAC 映射自洽（1.11→12.69%，1.48→16.39%，1.91→20.56%，0.26→3.54%，0.28→3.74%，0.23→3.03%，22.19→100%） | — | UNKNOWN | `gate_m1_theory.json`（c-pac-table） |

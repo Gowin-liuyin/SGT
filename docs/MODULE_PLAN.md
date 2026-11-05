@@ -6,7 +6,7 @@
 | 模块 | 名称 | 依赖 | 产物 | 门禁 | 通过判据（可执行） |
 |---|---|---|---|---|---|
 | **M0** | 骨架 | — | 目录、SPEC、分析、计划、claim 表、运行器、状态表、报告骨架 | `gate_m0_skeleton.py` | 必需文件存在且非空；`run_gates --self-test` 返回 0（含 fail-fast 与 `pass:false` 落盘）；MODULE_PLAN 可解析出 M0..M10；`results/` 可写；状态表初始全 PENDING |
-| **M1** | 理论核心 | M0 | `src/sgt/sampling.py`、`src/sgt/theory.py`、`tests/test_theory.py` | `gate_m1_theory.py` | ① Eq(1) 逐元素复算误差 0；② 残差协方差 vs $\Sigma$ 相对误差 ≤2%；③ Prop 3.3 KS $p>0.01$；④ Cor 3.4 能量距离在 95% 临界内；⑤ Eq(5)(7) 与数值积分误差 ≤1e-6；⑥ Eq(6) 上界 100/100 组成立；⑦ Eq(4) 反解复现 Table 1/2 PAC-Adv（±0.15pp） |
+| **M1** | 理论核心 | M0 | `src/sgt/sampling.py`、`src/sgt/theory.py`、`tests/test_theory.py` | `gate_m1_theory.py` | ① Eq(1) 逐元素复算误差 0；② 残差协方差 vs $\Sigma$ 相对误差 ≤2%；③ Prop 3.3 KS $p>0.01$；④ Cor 3.4 能量距离在 95% 临界内；⑤ Eq(5)(7)：解析恒等式误差 ≤1e-6，MC 估计与数值积分相对误差 ≤2%；⑥ Eq(6) 上界 100/100 组成立；⑦ Eq(4) 反解复现 Table 1/2 PAC-Adv（±0.15pp） |
 | **M2** | 损失函数 | M1 | `src/sgt/losses.py`、`tests/test_losses.py` | `gate_m2_losses.py` | Eq(8)(9)(10)(11)(12)(13) 逐条数值对照（1e-6）；Alg.1 与直译参考实现一致；$L^{CGE}$ 对 $\mu$ 梯度为 0；padding mask 正确；梯度非零/有限 |
 | **M3** | SGT 模型 | M2 | `src/sgt/model.py`、`tests/test_model.py` | `gate_m3_model.py` | 形状/正定性；stochastic（异 seed 异输出）；sequence-dependent（改一个 token 使输出变化，且变化幅度 > 0 阈值）；可训练参数梯度非零；序列化往返；确定性（同 seed 同输出位一致） |
 | **M4** | 指标与攻击 | M1、M3 | `src/sgt/metrics.py`、`src/sgt/attacks.py`、`tests/test_metrics.py` | `gate_m4_metrics.py` | 秩/NN/MRP/TTR/SymTTR/Histent 在解析构造上的精确值；SymTTR≤TTR；恒等变换 FR=0、TTR=0；MI-MC 与解析 1 维 GMM 误差 ≤2%；PAC 单调性；BeamClean 无噪声≈NN、随 $\sigma$ 单调 |
