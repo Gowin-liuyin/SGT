@@ -1,0 +1,91 @@
+{
+  "gate": "m6",
+  "name": "train",
+  "module_entry": "§4：冻结 M、只更新 SGT；Eq (3)(11)",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-train-runs",
+      "expected": "3 finite steps",
+      "actual": "n=3 losses=[33.7013, 36.9674, 37.014]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-lm-frozen",
+      "expected": "bitwise identical",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-sgt-updated",
+      "expected": "全部 SGT 张量都有更新",
+      "actual": "17/17 changed",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-loss-decomp",
+      "expected": "|loss-(loss_u+Σw·term)| < 1e-9",
+      "actual": "0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-determinism",
+      "expected": "identical history",
+      "actual": "[33.701308, 36.943294, 36.985587]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-no-terms",
+      "expected": "loss == loss_u",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-checkpoint-files",
+      "expected": ">=1 checkpoint",
+      "actual": "['step_0.pt', 'step_1.pt']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-checkpoint-restore",
+      "expected": "identical outputs",
+      "actual": "0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-config-echo",
+      "expected": "config echoed",
+      "actual": "['steps', 'lr', 'weight_decay', 'grad_clip']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-median-norm",
+      "expected": "> 0",
+      "actual": "0.112355",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:33:27+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

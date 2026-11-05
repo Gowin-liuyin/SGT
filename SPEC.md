@@ -271,6 +271,24 @@ experiments/run_ablation.py, run_constant_noise.py, run_pupa.py, run_large_model
 ### A17 padding / mask
 - 选择：右 padding，`attention_mask` 传入 LM；SGT 也在 padding 位置运行但损失/指标只用有效 token；batch 内 padding 的 token 不参与 MI/ACS 的归一化。
 
+
+### A18 训练/评估文本的构造（论文未给）
+- 原文：§7 p.9 “SGT models trained on the OpenOrca dataset … Obfuscation quality is evaluated on the Alpaca dataset”。
+- 论文未说明取哪些字段、是否用 chat template、是否包含 response。
+- 选择：OpenOrca = `system_prompt + "\n" + question + "\n" + response`；Alpaca = `instruction + ("\n"+input if input else "") + "\n" + output`；不使用 chat template（避免模板 token 引入论文未提及的额外内容）。
+- 影响：SGT 训练与秩指标所作用的 token 集合；M5 记录 fingerprint。
+
+### A19 MI 损失的“独立批”来源
+- 原文：Alg.1 L1 “Sample two independent batches: X_b ∼ D, X_b′ ∼ D”。
+- 选择：训练时用数据流中的**下一个 batch** 作为 `X_b′`（detach，不反传）；首步用当前 batch 的下一个。语义上仍是同分布独立采样。
+- 验证：M6 gate 检查 `x′` 分支不产生梯度。
+
+### A20 PUPA 的文本字段
+- 原文：§7 p.9 只在 PUPA 上算 NN/BeamClean FR 与 PII-Ratio，未说用哪个字段。
+- 数据实际字段：`user_query`（含 PII 的用户输入）、`target_response`（模型回答）、`redacted_query`、`pii_units`。
+- 选择：**`user_query`**（SGT 保护的是输入，攻击重建的也是输入；`target_response` 是模型输出，不属于被保护对象）。
+- 影响：M8 的 PUPA 指标与 PII-Ratio 分母。若误用 target_response，PII-Ratio 语义错误。
+
 ---
 
 ## 8. 环境

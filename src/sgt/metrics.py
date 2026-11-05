@@ -211,7 +211,8 @@ def symttr(ranks, k, vocab_size) -> float:
 
 def _rank_counts(ranks: torch.Tensor, vocab_size: int) -> torch.Tensor:
     """把 1-based 秩计数成 ``[V]``（index 0 ↔ rank 1）。"""
-    counts = torch.bincount(ranks, minlength=vocab_size + 1)
+    # bincount 在 MPS 上不可用；直方图是 CPU 侧的小结果。
+    counts = torch.bincount(ranks.detach().cpu(), minlength=vocab_size + 1)
     return counts[1 : vocab_size + 1].long()
 
 

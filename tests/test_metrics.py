@@ -99,6 +99,13 @@ def test_ranks_ties_follow_token_id_order():
     got = M.ranks(torch.zeros(1, 3, dtype=F64), torch.tensor([3]), table2)
     assert int(got[0]) == 5  # 近点(0.25)排第 1，4 个等距 token 中 id=3 排第 5
 
+    # 重复 embedding：id 3 与 id 5 距离都为 0，id 5 的秩应为 2。
+    dup = table.clone()
+    dup[1] = dup[0]
+    assert int(M.ranks(dup[0:1], torch.tensor([1]), dup)[0]) == 2
+    assert int(M.nn_reconstruct(dup[0:1], dup)[0]) == 0
+    assert int(M.mrp_reconstruct(dup[0:1], dup, 2)[0]) == 1
+
 
 # --------------------------------------------------------------------------- #
 # 2. TTR / SymTTR
@@ -126,6 +133,8 @@ def test_rank_histogram_and_entropy():
     uniform = torch.arange(1, vocab + 1)
     assert torch.equal(M.rank_histogram(uniform, vocab), torch.ones(vocab, dtype=torch.long))
     assert M.hist_entropy(uniform, vocab) == pytest.approx(1.0, abs=1e-12)
+    # 每个秩重复多次仍是均匀直方图。
+    assert M.hist_entropy(uniform.repeat(3), vocab) == pytest.approx(1.0, abs=1e-12)
 
     single = torch.ones(10, dtype=torch.long)
     assert M.hist_entropy(single, vocab) == 0.0

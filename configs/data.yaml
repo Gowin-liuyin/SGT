@@ -1,0 +1,29 @@
+# M5 数据管线配置（SPEC §5 / D2 / A13）
+# 论文协议：OpenOrca 15% 训练、Alpaca 评估；本地降规模由 max_examples 截断。
+seed: 0
+max_len: 128
+batch_size: 4
+cache_dir: data_cache
+frac: 0.15 # 仅记录论文协议（n_selected = ceil(0.15*n_total)），不决定实际加载条数
+
+openorca:
+  dataset: Open-Orca/OpenOrca
+  config: default
+  split: train
+  max_examples: 4000 # 降规模：实际加载条数（load_openorca(max_examples=...)）
+  fields: [id, system_prompt, question, response]
+
+alpaca:
+  dataset: tatsu-lab/alpaca
+  config: default
+  split: train
+  max_examples: 1000 # 降规模：评估集子集（全量 52002）
+  fields: [instruction, input, output, text]
+
+pupa:
+  dataset: Columbia-NLP/PUPA
+  config: pupa_tnb # pupa_tnb → PUPA_TNB.csv（237 条）；pupa_new → PUPA_New.csv（664 条）
+  split: train
+  text_field: target_response # 最长的自然语言文本字段
+  fields:
+    [conversation_hash, predicted_category, user_query, target_response, pii_units, redacted_query]

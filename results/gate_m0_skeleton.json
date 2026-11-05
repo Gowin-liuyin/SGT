@@ -19,8 +19,8 @@
     },
     {
       "id": "c-spec-ambiguities",
-      "expected": "A1..A17",
-      "actual": "A1..A17",
+      "expected": "A1..An 连续且 n>=17",
+      "actual": "A1..A20",
       "pass": true,
       "detail": ""
     },
@@ -62,7 +62,7 @@
     {
       "id": "c-state-status",
       "expected": "⊆ {PENDING, IN_PROGRESS, PASS, FAIL, BLOCKED}",
-      "actual": "['IN_PROGRESS', 'PENDING']",
+      "actual": "['IN_PROGRESS', 'PASS', 'PENDING']",
       "pass": true,
       "detail": ""
     },
@@ -76,7 +76,7 @@
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-05T18:58:51+0800",
+  "timestamp": "2026-11-05T19:29:38+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"

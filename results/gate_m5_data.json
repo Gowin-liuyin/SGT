@@ -1,0 +1,77 @@
+{
+  "gate": "m5",
+  "name": "data",
+  "module_entry": "§7 p.9：OpenOrca 15%、Alpaca 评估、PUPA",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-openorca-counts",
+      "expected": "n_selected == ceil(0.15*n_total)",
+      "actual": "n_total=2942029 n_selected=441305",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-openorca-deterministic",
+      "expected": "len=200 & identical fingerprint",
+      "actual": "len=200 fp=958743522710a0c4==958743522710a0c4",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-alpaca",
+      "expected": "(100, 'Q1\\nA1', 'Q2\\nctx\\nA2')",
+      "actual": "(100, 'Q1\\nA1', 'Q2\\nctx\\nA2')",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-disjoint",
+      "expected": "intersection == 0",
+      "actual": 0,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pupa-load",
+      "expected": "20 rows & non-empty prompt",
+      "actual": "len=20 prompt_len=182",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pupa-field",
+      "expected": "build_prompt == user_query (SPEC A20)",
+      "actual": "equals_user_query=False differs_from_target_response=False",
+      "pass": false,
+      "detail": "fields=['conversation_hash', 'pii_units', 'predicted_category', 'redacted_query', 'target_response', 'user_query']"
+    },
+    {
+      "id": "c-tokenize",
+      "expected": "min char-similarity > 0.9",
+      "actual": "1.000",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-batches",
+      "expected": "deterministic, shapes equal, padding masked",
+      "actual": "same=True shapes=(4, 64) pad_masked=True",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": false,
+  "status": "FAIL",
+  "timestamp": "2026-11-05T19:30:22+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

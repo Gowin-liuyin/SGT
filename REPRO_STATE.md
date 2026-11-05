@@ -4,7 +4,7 @@
 论文: Learning Obfuscations Of LLM Embedding Sequences: Stained Glass Transform (arXiv:2506.09452v1)
 论文源: `2506.09452v1.pdf`（本地，文本抽取 `paper.txt`，不入库）
 代码源: 无（`github.com/Gowin-liuyin/SGT` 为空仓库；本仓库为交付仓库）
-当前阶段: Phase 1（M3/M4/M5 并行进行中）
+当前阶段: Phase 1（M5 数据收尾、M6 训练回路、M8a Utility 并行）
 当前目标: M3 模型、M4 指标、M5 数据
 本轮门禁: M0/M1/M2 PASS
 证据: `results/gate_m0_skeleton.json`、`gate_m1_theory.json`、`gate_m2_losses.json`
@@ -14,10 +14,10 @@
 | M0 骨架 | — | PASS | `results/gate_m0_skeleton.json` | 运行器 self-test 通过 |
 | M1 理论核心 | M0 | PASS | `results/gate_m1_theory.json` | PAC 复现 Table1/2；Eq(6) 反例（F29） |
 | M2 损失 | M1 | PASS | `results/gate_m2_losses.json` | Eq8 pair/full 双实现；L_U=CE 非 KL |
-| M3 模型 | M2 | PENDING | — | µθ/Σθ transformer |
-| M4 指标与攻击 | M1,M3 | PENDING | — | rank/TTR/SymTTR/MI/PAC/BeamClean |
-| M5 数据 | M0 | IN_PROGRESS | — | OpenOrca/Alpaca/PUPA |
-| M6 训练 | M2,M3,M5 | PENDING | — | 冻结 LM + SGT |
+| M3 模型 | M1 | PASS | `results/gate_m3_model.json` | 双向 Transformer + 零初始化头 |
+| M4 指标与攻击 | M1 | PASS | `results/gate_m4_metrics.json` | rank/TTR/SymTTR/BeamClean |
+| M5 数据 | M0 | IN_PROGRESS | gate_m5_data: 8/9 | PUPA 字段待改（A20） |
+| M6 训练 | M2,M3,M4,M5 | IN_PROGRESS | gate_m6_train PASS（代码态） | 等 worker 交付 tests |
 | M7 消融实验 | M6 | PENDING | — | Table 1 降规模、Fig 3/4 |
 | M8 Utility/PII | M6,M7 | PENDING | — | lm-eval, PAPILLON |
 | M9 大模型脚本 | M8 | PENDING | — | 本地 BLOCKED |

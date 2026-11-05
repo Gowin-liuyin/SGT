@@ -305,6 +305,8 @@ def test_09_sample_formula_and_generator():
         mu, log_sigma2 = model(x)
         sigma = _sigma_from_log_sigma2(model, log_sigma2)
         out = model.sample(x, u=u)
+    # Σ 的对角必须严格正（exp 结构保证；MODULE_PLAN M3/c-posdef）。
+    assert torch.isfinite(sigma).all() and (sigma > 0).all()
     assert torch.allclose(out, x + mu + sigma * u, atol=1e-12)
     assert torch.equal(x, x_before)
 

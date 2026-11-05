@@ -54,8 +54,10 @@ def main() -> int:
     # 3) SPEC 的歧义条目 A1..A17 齐全
     spec = (REPO_ROOT / "SPEC.md").read_text(encoding="utf-8")
     ambiguities = sorted({int(x) for x in re.findall(r"### A(\d+)[\s:：．.]", spec)})
-    g.check("c-spec-ambiguities", expected="A1..A17", actual=f"A1..A{max(ambiguities) if ambiguities else 0}",
-            passed=ambiguities == list(range(1, 18)))
+    contiguous = ambiguities == list(range(1, len(ambiguities) + 1))
+    g.check("c-spec-ambiguities", expected="A1..An 连续且 n>=17",
+            actual=f"A1..A{max(ambiguities) if ambiguities else 0}",
+            passed=contiguous and len(ambiguities) >= 17)
 
     # 4) claim 表：C1..C34 齐全，判定值合法
     claims = (REPO_ROOT / "docs/CLAIMS_CHECKLIST.md").read_text(encoding="utf-8")
