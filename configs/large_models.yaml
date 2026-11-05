@@ -1,0 +1,46 @@
+# M9 大模型配置（SPEC §5 D4；论文 arXiv:2506.09452v1 §7.1 Table 2 / p.10）
+#
+# !! 本配置在本仓库**不可执行**：需要最多 64 节点 × 8 × A100-80G，本机无 GPU 集群。!!
+# 用途仅限：experiments/run_large_models.py 的配置回显 + torchrun 启动命令生成 + 本地
+# dry-run 冒烟（tiny 模型 1 步）。Table 2 的数值在复现报告中记为 BLOCKED（SPEC D4）。
+#
+# 论文 Table 2 设置（原文转录，p.10 "Large Models Fully Trained"）：
+# - 目标模型：Llama-3.3-70B、Qwen3-32B、Llama-70B distilled DeepSeek-R1-70B；
+# - 损失：full MI + AbsCos + Norm（= train_sgt 的 loss_terms [mi, acs, mnp]）；
+# - 数据：**2 个 epoch 的完整 OpenOrca**；结果报在最多 0.5% 的 OpenOrca 验证子集上；
+# - 硬件：最多 64 节点 × 8 × Nvidia A100 80GB（硬件故障时部分重启用 32 节点）；
+# - 并行：FSDP2 × Tensor-Parallelism；按硬件与上下文长度训练最多 2 天。
+#
+# 说明：epochs / validation_fraction / parallel / models 是论文值；alphas 是复现选择（SPEC A12）。
+train:
+  # 论文：trained for two epochs on the full OpenOrca
+  epochs: 2
+  dataset: Open-Orca/OpenOrca
+  frac: 1.0
+  # 论文：validation subset of OpenOrca (up to half a percent of the dataset)
+  validation_fraction: 0.005
+  # 论文：full MI+AbsCos+Norm loss（顺序与 run_ablation 的 mi_abscos_norm variant 一致）。
+  loss_terms: [mi, acs, mnp]
+  # 与 configs/ablation.yaml 一致的复现选择（SPEC A12）。注意 mi 权重 4.8828125e-4 = 1/2048：
+  # ablation 的 d=2048 时即 1/d；本配置的 70B 模型 d=8192（1/d = 1.220703125e-4）。
+  # 按任务单要求原样沿用 ablation 值，脚本不回改，只把实际使用值写进结果 JSON。
+  alphas: {mi: 4.8828125e-4, acs: 1.0, mnp: 1.0}
+
+sgt:
+  hidden: 512
+  n_layers: 2
+  n_heads: 4
+  ffn_mult: 4
+  sigma_init: 1.0
+
+# 论文：FSDP2 × Tensor-Parallelism，up to 64 nodes of 8 × A100-80G。
+# tp_size=8 = 单节点 GPU 数：FSDP2 负责跨节点/跨卡参数分片，TP 在节点内切分。
+parallel: {fsdp2: true, tp_size: 8, nodes: 64, gpus_per_node: 8}
+
+# 论文 Table 2 的三个目标模型（repo_id 逐字转录）。
+# d = LM hidden_size；sgt_max_len = SGT 支持的最大序列长度（论文未给 context length，
+# 取 4096 作为复现选择，写入结果 JSON，不当作论文值引用）。
+models:
+  llama-3.3-70b:      {repo_id: meta-llama/Llama-3.3-70B-Instruct, d: 8192, sgt_max_len: 4096}
+  qwen3-32b:          {repo_id: Qwen/Qwen3-32B, d: 5120, sgt_max_len: 4096}
+  deepseek-r1-70b:    {repo_id: deepseek-ai/DeepSeek-R1-Distill-Llama-70B, d: 8192, sgt_max_len: 4096}

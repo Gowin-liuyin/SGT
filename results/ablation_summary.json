@@ -1,0 +1,222 @@
+{
+ "scale_note": "降规模：Llama-3.2-1B fp32 / OpenOrca 4000 条 / B=1×T=256 / 250 步 / Alpaca 200 条(600 token) 评测；Utility 为 5 任务 limit 50 的平均差",
+ "utility_tasks": [
+  "arc_easy",
+  "arc_challenge",
+  "openbookqa",
+  "piqa",
+  "truthfulqa_mc2"
+ ],
+ "rows": [
+  {
+   "variant": "abscos",
+   "metrics": {
+    "n_tokens": 600,
+    "vocab_size": 128256,
+    "nn_fr": 99.83333333333333,
+    "mrp_fr": 99.5,
+    "mrp_r_star": 1559,
+    "ttr_10": 98.83333333333333,
+    "ttr_50": 97.83333333333334,
+    "symttr_10": 98.83333333333333,
+    "symttr_100": 96.0,
+    "hist_entropy": 0.5410498060857677,
+    "rank_mean": 17831.685,
+    "rank_median": 5530.0,
+    "mi_feature_mean": 4.991907719307393,
+    "mi_sum": 10223.42700914154,
+    "mi_feature_median": 2.990598693847656,
+    "pac_adv": 48.33019666928162
+   },
+   "utility_pp_5task": -20.56878579394292,
+   "oracle_table1": {
+    "utility": -0.01,
+    "nn_fr": 94.9,
+    "mrp_fr": 94.9,
+    "symttr_10": 93.36,
+    "symttr_100": 92.86,
+    "hist_entropy": 87.62,
+    "mi": 6000000000.0,
+    "pac": 100.0
+   },
+   "deltas": {
+    "nn_fr": 4.933333333333323,
+    "symttr_10": 5.473333333333329,
+    "hist_entropy": -87.07895019391424,
+    "mi": -5999999995.008092,
+    "pac_adv": -51.66980333071838
+   }
+  },
+  {
+   "variant": "cossim",
+   "metrics": {
+    "n_tokens": 600,
+    "vocab_size": 128256,
+    "nn_fr": 99.66666666666667,
+    "mrp_fr": 99.66666666666667,
+    "mrp_r_star": 1,
+    "ttr_10": 99.0,
+    "ttr_50": 98.0,
+    "symttr_10": 99.0,
+    "symttr_100": 95.5,
+    "hist_entropy": 0.5419097133105429,
+    "rank_mean": 27180.656666666666,
+    "rank_median": 7315.0,
+    "mi_feature_mean": 4.847080619531125,
+    "mi_sum": 9926.821108799744,
+    "mi_feature_median": 3.122611895751953,
+    "pac_adv": 47.089186156499906
+   },
+   "utility_pp_5task": -20.95903044176424,
+   "oracle_table1": {
+    "utility": -5.49,
+    "nn_fr": 99.98,
+    "mrp_fr": 3.21,
+    "symttr_10": 1.43,
+    "symttr_100": 1.07,
+    "hist_entropy": 2.47,
+    "mi": 3.2e+19,
+    "pac": 100.0
+   },
+   "deltas": {
+    "nn_fr": -0.3133333333333326,
+    "symttr_10": 97.57,
+    "hist_entropy": -1.9280902866894571,
+    "mi": -3.2e+19,
+    "pac_adv": -52.910813843500094
+   }
+  },
+  {
+   "variant": "mi",
+   "metrics": {
+    "n_tokens": 600,
+    "vocab_size": 128256,
+    "nn_fr": 99.66666666666667,
+    "mrp_fr": 99.16666666666667,
+    "mrp_r_star": 69,
+    "ttr_10": 98.5,
+    "ttr_50": 92.16666666666666,
+    "symttr_10": 98.5,
+    "symttr_100": 86.83333333333333,
+    "hist_entropy": 0.5279487888195651,
+    "rank_mean": 4751.77,
+    "rank_median": 850.0,
+    "mi_feature_mean": 2.261125360266864,
+    "mi_sum": 4630.784737826538,
+    "mi_feature_median": 1.6815272705078126,
+    "pac_adv": 23.899789357652864
+   },
+   "utility_pp_5task": -20.86671523755706,
+   "oracle_table1": {
+    "utility": -0.72,
+    "nn_fr": 34.43,
+    "mrp_fr": 34.43,
+    "symttr_10": 18.96,
+    "symttr_100": 17.39,
+    "hist_entropy": 23.96,
+    "mi": 1.48,
+    "pac": 16.39
+   },
+   "deltas": {
+    "nn_fr": 65.23666666666668,
+    "symttr_10": 79.53999999999999,
+    "hist_entropy": -23.432051211180436,
+    "mi": 0.7811253602668642,
+    "pac_adv": 7.509789357652863
+   }
+  },
+  {
+   "variant": "mi_abscos",
+   "metrics": {
+    "n_tokens": 600,
+    "vocab_size": 128256,
+    "nn_fr": 99.83333333333333,
+    "mrp_fr": 99.66666666666667,
+    "mrp_r_star": 2,
+    "ttr_10": 99.16666666666667,
+    "ttr_50": 97.0,
+    "symttr_10": 99.16666666666667,
+    "symttr_100": 95.83333333333334,
+    "hist_entropy": 0.5413203918204179,
+    "rank_mean": 14669.433333333332,
+    "rank_median": 4469.0,
+    "mi_feature_mean": 1.9966323899134992,
+    "mi_sum": 4089.1031345428464,
+    "mi_feature_median": 1.6012839294433594,
+    "pac_adv": 21.388652085947147
+   },
+   "utility_pp_5task": -20.581066422965385,
+   "oracle_table1": {
+    "utility": -2.44,
+    "nn_fr": 81.23,
+    "mrp_fr": 81.23,
+    "symttr_10": 71.36,
+    "symttr_100": 66.88,
+    "hist_entropy": 75.72,
+    "mi": 1.91,
+    "pac": 20.56
+   },
+   "deltas": {
+    "nn_fr": 18.603333333333325,
+    "symttr_10": 27.806666666666672,
+    "hist_entropy": -75.17867960817958,
+    "mi": 0.08663238991349931,
+    "pac_adv": 0.828652085947148
+   }
+  },
+  {
+   "variant": "mi_abscos_norm",
+   "metrics": {
+    "n_tokens": 600,
+    "vocab_size": 128256,
+    "nn_fr": 97.33333333333334,
+    "mrp_fr": 97.33333333333334,
+    "mrp_r_star": 1,
+    "ttr_10": 90.83333333333333,
+    "ttr_50": 82.5,
+    "symttr_10": 90.83333333333333,
+    "symttr_100": 79.0,
+    "hist_entropy": 0.5205381683633387,
+    "rank_mean": 17488.231666666667,
+    "rank_median": 2837.0,
+    "mi_feature_mean": 1.6338509398430585,
+    "mi_sum": 3346.126724798584,
+    "mi_feature_median": 1.4452203796386718,
+    "pac_adv": 17.883971928015036
+   },
+   "utility_pp_5task": -19.09677702635113,
+   "oracle_table1": {
+    "utility": -1.97,
+    "nn_fr": 93.0,
+    "mrp_fr": 93.0,
+    "symttr_10": 90.42,
+    "symttr_100": 88.15,
+    "hist_entropy": 91.9,
+    "mi": 1.11,
+    "pac": 12.69
+   },
+   "deltas": {
+    "nn_fr": 4.333333333333343,
+    "symttr_10": 0.4133333333333269,
+    "hist_entropy": -91.37946183163666,
+    "mi": 0.5238509398430584,
+    "pac_adv": 5.193971928015037
+   }
+  },
+  {
+   "variant": "comp_entropy",
+   "status": "diverged",
+   "evidence": "sigma^2 -> NaN at ~250 steps; ValueError feature_mi 出现非有限值（F31）",
+   "oracle_table1": {
+    "utility": -13.84,
+    "nn_fr": 88.41,
+    "mrp_fr": 88.41,
+    "symttr_10": 75.99,
+    "symttr_100": 49.75,
+    "hist_entropy": 58.6,
+    "mi": 22.19,
+    "pac": 100.0
+   }
+  }
+ ]
+}

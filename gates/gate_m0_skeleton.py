@@ -62,9 +62,9 @@ def main() -> int:
     # 4) claim 表：C1..C34 齐全，判定值合法
     claims = (REPO_ROOT / "docs/CLAIMS_CHECKLIST.md").read_text(encoding="utf-8")
     claim_ids = sorted({int(x) for x in re.findall(r"^\|\s*C(\d+)\s*\|", claims, flags=re.M)})
-    verdicts = set(re.findall(r"\|\s*(VERIFIED|FALSIFIED|BLOCKED|UNKNOWN)\s*\|", claims))
-    g.check("c-claims-ids", expected="C1..C34", actual=claim_ids,
-            passed=claim_ids == list(range(1, 35)))
+    verdicts = set(re.findall(r"\|\s*(VERIFIED|FALSIFIED|BLOCKED|UNKNOWN)[^|]*\|", claims))
+    g.check("c-claims-ids", expected="C1..Cn 连续且 n>=34", actual=f"C1..C{max(claim_ids) if claim_ids else 0}",
+            passed=claim_ids == list(range(1, len(claim_ids) + 1)) and len(claim_ids) >= 34)
     g.check("c-claims-verdicts", expected=sorted(ALLOWED_VERDICTS), actual=sorted(verdicts),
             passed=bool(verdicts) and verdicts <= ALLOWED_VERDICTS)
 
@@ -89,11 +89,12 @@ def main() -> int:
 
     # 7) 状态表包含 M0..M10 且初始状态合法
     state = (REPO_ROOT / "REPRO_STATE.md").read_text(encoding="utf-8")
-    rows = re.findall(r"^\|\s*(M\d+)[^|]*\|[^|]*\|\s*(\w[\w ]*?)\s*\|", state, flags=re.M)
+    rows = re.findall(r"^\|\s*(M\d+[ab]?)[^|]*\|[^|]*\|\s*(\w[\w ]*?)\s*\|", state, flags=re.M)
     state_modules = [m for m, _ in rows]
     statuses = {s for _, s in rows}
-    g.check("c-state-modules", expected=expected, actual=state_modules,
-            passed=sorted(state_modules) == sorted(expected))
+    expected_state = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8a", "M8b", "M9", "M10"]
+    g.check("c-state-modules", expected=expected_state, actual=state_modules,
+            passed=sorted(state_modules) == sorted(expected_state))
     g.check("c-state-status", expected="⊆ {PENDING, IN_PROGRESS, PASS, FAIL, BLOCKED}",
             actual=sorted(statuses),
             passed=statuses <= {"PENDING", "IN_PROGRESS", "PASS", "FAIL", "BLOCKED"})

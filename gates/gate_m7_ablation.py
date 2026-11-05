@@ -73,22 +73,26 @@ def main() -> int:
     g.check("c-rank-far", expected="nn_fr == 100", actual=f"{m_far['nn_fr']:.2f}",
             passed=abs(m_far["nn_fr"] - 100.0) < 1e-9)
 
-    # --- feature_mi：1 维 GMM 对照 theory --------------------------------
-    from sgt import theory
-    g2 = torch.Generator().manual_seed(1)
+    # --- feature_mi：A7 口径（Eq 8 逐特征均值），解析值 = 1 + 2/σ² --------
+    # 注意（F30）：该量**不是**信息论互信息；x~N(0,1)、µ=0、σ² 固定时，
+    # (x̃−x')² 的方差为 2+σ²，逐特征均值 = 1 + 2/σ²。用它对照 theory.MI 会差一个量级。
+    sig2 = 0.5
     n = 4000
-    means = torch.zeros(n, 1)
-    log_vars = torch.log(torch.full((n, 1), 0.5))
+    g2 = torch.Generator().manual_seed(1)
     x1 = torch.randn(n, 1, generator=g2)
     mu1 = torch.zeros(n, 1)
-    w = torch.full((n,), 1.0 / n)
-    mi_ref = theory.mutual_information_mc(w, means, log_vars, 20000, generator=torch.Generator().manual_seed(2))
-    xt = x1 + mu1 + torch.exp(0.5 * log_vars) * torch.randn(n, 1, generator=g2)
+    log_vars = torch.log(torch.full((n, 1), sig2))
+    xt = x1 + torch.exp(0.5 * log_vars) * torch.randn(n, 1, generator=g2)
     mi_got = ra.feature_mi(xt, x1, mu1, log_vars, log_vars, n_pairs=20000, seed=3)
-    rel = abs(mi_got["mi_feature_mean"] - float(mi_ref)) / max(abs(float(mi_ref)), 1e-12)
-    g.check("c-feature-mi", expected="与 theory MC 相对误差 < 10%",
-            actual=f"{rel*100:.2f}% (got={mi_got['mi_feature_mean']:.4f}, ref={float(mi_ref):.4f})",
-            passed=rel < 0.10)
+    expected = 1.0 + 2.0 / sig2
+    rel = abs(mi_got["mi_feature_mean"] - expected) / expected
+    g.check("c-feature-mi", expected=f"1+2/sigma^2={expected} (±10%)",
+            actual=f"{mi_got['mi_feature_mean']:.4f} (rel={rel*100:.2f}%)", passed=rel < 0.10,
+            detail="A7/F30：Eq(8) 逐特征均值不是信息论 MI")
+    # 与训练侧 Eq (8) 的 d 倍关系一致
+    g.check("c-mi-sum", expected="mi_sum = mi_feature_mean * d",
+            actual=f"{mi_got['mi_sum']:.4f} vs {mi_got['mi_feature_mean']*1:.4f}",
+            passed=abs(mi_got["mi_sum"] - mi_got["mi_feature_mean"]) < 1e-6)
 
     # --- 常数噪声脚本：单调性（合成距离） --------------------------------
     try:
@@ -103,10 +107,19 @@ def main() -> int:
             passed=cn_ok, detail="" if cn_ok else cn_err)
 
     # --- 产物：六个 variant 的 JSON --------------------------------------
+    # comp_entropy 按论文原式（-log|Σ|）训练会发散（F31）；接受 summary 中的 diverged 证据
+    summary0 = REPO_ROOT / "results" / "ablation_summary.json"
+    diverged = set()
+    if summary0.exists():
+        for r in json.loads(summary0.read_text()).get("rows", []):
+            if r.get("status") == "diverged":
+                diverged.add(r["variant"])
     missing, schema_bad = [], []
     for v in VARIANTS:
         p = REPO_ROOT / "results" / f"ablation_{v}.json"
         if not p.exists():
+            if v in diverged:
+                continue
             missing.append(v)
             continue
         payload = json.loads(p.read_text())
@@ -114,8 +127,11 @@ def main() -> int:
         miss = [k for k in REQUIRED_METRICS if k not in metrics]
         if miss:
             schema_bad.append(f"{v}:{miss}")
-    g.check("c-results-six", expected="6 个 ablation_*.json", actual=f"missing={missing}",
-            passed=not missing)
+    g.check("c-results-six", expected="6 个变体均有结果或发散证据（F31）",
+            actual=f"missing={missing} diverged={sorted(diverged)}", passed=not missing)
+    g.check("c-comp-entropy-diverged", expected="comp_entropy 有发散证据或有限结果",
+            actual=f"diverged={('comp_entropy' in diverged)} file={(REPO_ROOT/'results/ablation_comp_entropy.json').exists()}",
+            passed=("comp_entropy" in diverged) or (REPO_ROOT / "results" / "ablation_comp_entropy.json").exists())
     g.check("c-results-metrics", expected="每行 11 个指标齐全", actual=f"bad={schema_bad}",
             passed=not schema_bad)
 
@@ -126,7 +142,8 @@ def main() -> int:
         g.check("c-summary-schema", expected="含 6 行与 table1 参照",
                 actual=f"rows={len(s.get('rows', []))} keys={list(s)[:4]}",
                 passed=len(s.get("rows", [])) == 6)
-        zero = [r["variant"] for r in s.get("rows", []) if r.get("metrics", {}).get("n_tokens", 0) == 0]
+        zero = [r["variant"] for r in s.get("rows", [])
+                if r.get("status") != "diverged" and r.get("metrics", {}).get("n_tokens", 0) == 0]
         g.check("c-summary-nonempty", expected="n_tokens > 0", actual=f"zero={zero}", passed=not zero)
     else:
         g.check("c-summary-schema", expected="results/ablation_summary.json 存在", actual="missing",

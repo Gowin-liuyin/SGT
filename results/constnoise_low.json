@@ -1,0 +1,138 @@
+{
+  "sigmas": [
+    0.01,
+    0.05,
+    0.1,
+    0.2,
+    0.5,
+    1.0
+  ],
+  "rows": [
+    {
+      "sigma": 0.01,
+      "log_eps": 6.312837097127505,
+      "epsilon": 551.6076955402116,
+      "nn_fr": 0.0,
+      "table_norm_p99": 1.1266723084985417,
+      "noise_seed": 0,
+      "n_tokens": 2000
+    },
+    {
+      "sigma": 0.05,
+      "log_eps": 4.703399184693405,
+      "epsilon": 110.3215391080423,
+      "nn_fr": 0.0,
+      "table_norm_p99": 1.1266723084985417,
+      "noise_seed": 1,
+      "n_tokens": 2000
+    },
+    {
+      "sigma": 0.1,
+      "log_eps": 4.010252004133459,
+      "epsilon": 55.16076955402115,
+      "nn_fr": 0.15,
+      "table_norm_p99": 1.1266723084985417,
+      "noise_seed": 2,
+      "n_tokens": 2000
+    },
+    {
+      "sigma": 0.2,
+      "log_eps": 3.3171048235735143,
+      "epsilon": 27.580384777010575,
+      "nn_fr": 37.85,
+      "table_norm_p99": 1.1266723084985417,
+      "noise_seed": 3,
+      "n_tokens": 2000
+    },
+    {
+      "sigma": 0.5,
+      "log_eps": 2.400814091699359,
+      "epsilon": 11.032153910804231,
+      "nn_fr": 98.85000000000001,
+      "table_norm_p99": 1.1266723084985417,
+      "noise_seed": 4,
+      "n_tokens": 2000
+    },
+    {
+      "sigma": 1.0,
+      "log_eps": 1.707666911139414,
+      "epsilon": 5.516076955402116,
+      "nn_fr": 100.0,
+      "table_norm_p99": 1.1266723084985417,
+      "noise_seed": 5,
+      "n_tokens": 2000
+    }
+  ],
+  "utility": null,
+  "utility_cmd": null,
+  "utility_note": "未实现：Utility 由 M8 的 lm-eval 管线负责，常数噪声不提供 Utility 结论",
+  "model": ".models/llama-3.2-1b-instruct",
+  "device": "mps",
+  "n_tokens": 2000,
+  "vocab_size": 128256,
+  "hidden_size": 2048,
+  "sensitivity_rule": "norm_p99",
+  "sensitivity_delta": 1.1266723084985417,
+  "delta_dp": 7.79690618762475e-06,
+  "noise": "x̃ = x + σ·u, u~N(0,I)（逐 token，固定 seed）",
+  "eval": {
+    "dataset": "tatsu-lab/alpaca",
+    "examples": 200,
+    "max_len": 96,
+    "tokens_requested": 2000,
+    "tokens": 2000,
+    "sequences": 30,
+    "seed": 0,
+    "chunk": 1024
+  },
+  "data": {
+    "dataset": "tatsu-lab/alpaca",
+    "n_examples": 200,
+    "rows_meta": {
+      "cache_file": "/Users/yin/code/SGT/data_cache/alpaca/train_first200.jsonl",
+      "config": "default",
+      "dataset": "tatsu-lab/alpaca",
+      "fetched_at": "2026-11-05T12:23:14+00:00",
+      "n_fetched": 200,
+      "n_total": 52002,
+      "pages": [
+        0,
+        100
+      ],
+      "requested": 200,
+      "source": "datasets-server.huggingface.co/rows",
+      "split": "train"
+    }
+  },
+  "epsilon_dp_note": "ε = Δ·sqrt(2 ln(1.25/δ_dp))/σ，Δ=embedding 行范数 99 分位（SPEC A14 复现选择；论文未定义 Δ，Fig 4 的 log(ε) 轴映射有 BLOCKED 风险）",
+  "timings": {
+    "lm_load_s": 5.581,
+    "data_s": 0.023,
+    "sensitivity_s": 0.139,
+    "eval_s": 4.865,
+    "total_s": 10.86
+  },
+  "meta": {
+    "timestamp": "2026-11-05T13:18:06+00:00",
+    "argv": [
+      "experiments/run_constant_noise.py",
+      "--model",
+      ".models/llama-3.2-1b-instruct",
+      "--eval-examples",
+      "200",
+      "--eval-max-len",
+      "96",
+      "--eval-tokens",
+      "2000",
+      "--sigmas",
+      "0.01,0.05,0.1,0.2,0.5,1.0",
+      "--device",
+      "mps",
+      "--out",
+      "results/constnoise_low.json"
+    ],
+    "torch_version": "2.15.0",
+    "torch_device": "mps",
+    "torch_dtype": "torch.float32"
+  }
+}

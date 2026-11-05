@@ -6,3 +6,6 @@ paper.txt
 repo/
 .models/
 data_cache/
+results/ckpt_*.pt
+results/*_rows.jsonl
+.venv-lm/

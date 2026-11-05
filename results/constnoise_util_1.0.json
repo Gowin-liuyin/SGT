@@ -1,0 +1,107 @@
+{
+  "tag": "constnoise_util_1.0",
+  "model": ".models/llama-3.2-1b-instruct",
+  "tasks": [
+    "arc_easy",
+    "piqa",
+    "truthfulqa_mc2"
+  ],
+  "limit": 50,
+  "device": "mps",
+  "sgt_ckpt": "/tmp/constnoise_sgt_1.0.pt",
+  "results": {
+    "arc_easy": {
+      "name": "arc_easy",
+      "alias": "arc_easy",
+      "sample_len": 50,
+      "acc,none": 0.18,
+      "acc_stderr,none": 0.054883922035138706,
+      "acc_norm,none": 0.22,
+      "acc_norm_stderr,none": 0.059178043363451366
+    },
+    "piqa": {
+      "name": "piqa",
+      "alias": "piqa",
+      "sample_len": 50,
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.07142857142857142,
+      "acc_norm,none": 0.48,
+      "acc_norm_stderr,none": 0.0713714056959817
+    },
+    "truthfulqa_mc2": {
+      "name": "truthfulqa_mc2",
+      "alias": "truthfulqa_mc2",
+      "sample_len": 50,
+      "acc,none": 0.417695467094547,
+      "acc_stderr,none": 0.06731599090187743
+    }
+  },
+  "meta": {
+    "timestamp": "2026-11-05T13:23:24.068364+00:00",
+    "duration_s": 55.605,
+    "batch_size": 1,
+    "argv": [
+      "experiments/run_utility.py",
+      "--model",
+      ".models/llama-3.2-1b-instruct",
+      "--tasks",
+      "arc_easy,piqa,truthfulqa_mc2",
+      "--limit",
+      "50",
+      "--batch-size",
+      "1",
+      "--device",
+      "mps",
+      "--sgt-ckpt",
+      "/tmp/constnoise_sgt_1.0.pt",
+      "--out",
+      "results/constnoise_util_1.0.json"
+    ],
+    "lm_eval_version": "0.4.13",
+    "transformers_version": "5.22.1",
+    "torch_version": "2.15.0",
+    "model_config": {
+      "hidden_size": 2048,
+      "num_hidden_layers": 16,
+      "num_attention_heads": 32,
+      "tie_word_embeddings": true
+    },
+    "n_samples": {
+      "arc_easy": {
+        "original": 2376,
+        "effective": 50
+      },
+      "piqa": {
+        "original": 1838,
+        "effective": 50
+      },
+      "truthfulqa_mc2": {
+        "original": 817,
+        "effective": 50
+      }
+    },
+    "n_shot": {
+      "arc_easy": 0,
+      "piqa": 0,
+      "truthfulqa_mc2": 0
+    },
+    "versions": {
+      "arc_easy": 1.0,
+      "piqa": 1.0,
+      "truthfulqa_mc2": 3.0
+    },
+    "group_subtasks": {},
+    "sgt": {
+      "d": 2048,
+      "hidden": 512,
+      "n_layers": 2,
+      "n_heads": 4,
+      "max_len": 1024,
+      "sigma_init": 1.0,
+      "sigma_min": 1e-06,
+      "seed": 0,
+      "dtype": "torch.float32",
+      "device_at_install": "mps:0"
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "gate": "m7",
+  "name": "ablation",
+  "module_entry": "Table 1 / Fig 3 / Fig 4",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-rank-identity",
+      "expected": "nn_fr=ttr=symttr=hist=0",
+      "actual": "{'nn_fr': 0.0, 'mrp_fr': 0.0, 'ttr_10': 0.0, 'symttr_10': 0.0, 'hist_entropy': 0.0}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-rank-far",
+      "expected": "nn_fr == 100",
+      "actual": "100.00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-feature-mi",
+      "expected": "1+2/sigma^2=5.0 (±10%)",
+      "actual": "5.0991 (rel=1.98%)",
+      "pass": true,
+      "detail": "A7/F30：Eq(8) 逐特征均值不是信息论 MI"
+    },
+    {
+      "id": "c-mi-sum",
+      "expected": "mi_sum = mi_feature_mean * d",
+      "actual": "5.0991 vs 5.0991",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-constnoise-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-results-six",
+      "expected": "6 个变体均有结果或发散证据（F31）",
+      "actual": "missing=[] diverged=['comp_entropy']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-comp-entropy-diverged",
+      "expected": "comp_entropy 有发散证据或有限结果",
+      "actual": "diverged=True file=False",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-results-metrics",
+      "expected": "每行 11 个指标齐全",
+      "actual": "bad=[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-summary-schema",
+      "expected": "含 6 行与 table1 参照",
+      "actual": "rows=6 keys=['scale_note', 'utility_tasks', 'rows']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-summary-nonempty",
+      "expected": "n_tokens > 0",
+      "actual": "zero=[]",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T21:28:26+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

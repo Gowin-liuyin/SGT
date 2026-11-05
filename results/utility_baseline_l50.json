@@ -1,0 +1,126 @@
+{
+  "tag": "utility_baseline_l50",
+  "model": ".models/llama-3.2-1b-instruct",
+  "tasks": [
+    "arc_easy",
+    "arc_challenge",
+    "openbookqa",
+    "piqa",
+    "truthfulqa_mc2"
+  ],
+  "limit": 50,
+  "device": "mps",
+  "sgt_ckpt": null,
+  "results": {
+    "arc_easy": {
+      "name": "arc_easy",
+      "alias": "arc_easy",
+      "sample_len": 50,
+      "acc,none": 0.62,
+      "acc_stderr,none": 0.06934092056863769,
+      "acc_norm,none": 0.62,
+      "acc_norm_stderr,none": 0.06934092056863769
+    },
+    "arc_challenge": {
+      "name": "arc_challenge",
+      "alias": "arc_challenge",
+      "sample_len": 50,
+      "acc,none": 0.38,
+      "acc_stderr,none": 0.06934092056863769,
+      "acc_norm,none": 0.34,
+      "acc_norm_stderr,none": 0.0676726816132972
+    },
+    "openbookqa": {
+      "name": "openbookqa",
+      "alias": "openbookqa",
+      "sample_len": 50,
+      "acc,none": 0.3,
+      "acc_stderr,none": 0.06546536707079771,
+      "acc_norm,none": 0.34,
+      "acc_norm_stderr,none": 0.0676726816132972
+    },
+    "piqa": {
+      "name": "piqa",
+      "alias": "piqa",
+      "sample_len": 50,
+      "acc,none": 0.68,
+      "acc_stderr,none": 0.06663945022680344,
+      "acc_norm,none": 0.7,
+      "acc_norm_stderr,none": 0.06546536707079771
+    },
+    "truthfulqa_mc2": {
+      "name": "truthfulqa_mc2",
+      "alias": "truthfulqa_mc2",
+      "sample_len": 50,
+      "acc,none": 0.5204171843523947,
+      "acc_stderr,none": 0.0582159248422588
+    }
+  },
+  "meta": {
+    "timestamp": "2026-11-05T12:54:31.291158+00:00",
+    "duration_s": 73.26,
+    "batch_size": 1,
+    "argv": [
+      "experiments/run_utility.py",
+      "--model",
+      ".models/llama-3.2-1b-instruct",
+      "--tasks",
+      "arc_easy,arc_challenge,openbookqa,piqa,truthfulqa_mc2",
+      "--limit",
+      "50",
+      "--batch-size",
+      "1",
+      "--device",
+      "mps",
+      "--out",
+      "results/utility_baseline_l50.json"
+    ],
+    "lm_eval_version": "0.4.13",
+    "transformers_version": "5.22.1",
+    "torch_version": "2.15.0",
+    "model_config": {
+      "hidden_size": 2048,
+      "num_hidden_layers": 16,
+      "num_attention_heads": 32,
+      "tie_word_embeddings": true
+    },
+    "n_samples": {
+      "arc_easy": {
+        "original": 2376,
+        "effective": 50
+      },
+      "arc_challenge": {
+        "original": 1172,
+        "effective": 50
+      },
+      "openbookqa": {
+        "original": 500,
+        "effective": 50
+      },
+      "piqa": {
+        "original": 1838,
+        "effective": 50
+      },
+      "truthfulqa_mc2": {
+        "original": 817,
+        "effective": 50
+      }
+    },
+    "n_shot": {
+      "arc_challenge": 0,
+      "arc_easy": 0,
+      "openbookqa": 0,
+      "piqa": 0,
+      "truthfulqa_mc2": 0
+    },
+    "versions": {
+      "arc_challenge": 1.0,
+      "arc_easy": 1.0,
+      "openbookqa": 1.0,
+      "piqa": 1.0,
+      "truthfulqa_mc2": 3.0
+    },
+    "group_subtasks": {},
+    "sgt": null
+  }
+}

@@ -26,15 +26,15 @@
     },
     {
       "id": "c-claims-ids",
-      "expected": "C1..C34",
-      "actual": "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34]",
+      "expected": "C1..Cn 连续且 n>=34",
+      "actual": "C1..C35",
       "pass": true,
       "detail": ""
     },
     {
       "id": "c-claims-verdicts",
       "expected": "['BLOCKED', 'FALSIFIED', 'UNKNOWN', 'VERIFIED']",
-      "actual": "['UNKNOWN']",
+      "actual": "['VERIFIED']",
       "pass": true,
       "detail": ""
     },
@@ -54,15 +54,15 @@
     },
     {
       "id": "c-state-modules",
-      "expected": "['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10']",
-      "actual": "['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10']",
+      "expected": "['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8a', 'M8b', 'M9', 'M10']",
+      "actual": "['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8a', 'M8b', 'M9', 'M10']",
       "pass": true,
       "detail": ""
     },
     {
       "id": "c-state-status",
       "expected": "⊆ {PENDING, IN_PROGRESS, PASS, FAIL, BLOCKED}",
-      "actual": "['IN_PROGRESS', 'PASS', 'PENDING']",
+      "actual": "['PASS']",
       "pass": true,
       "detail": ""
     },
@@ -76,7 +76,7 @@
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-05T19:29:38+0800",
+  "timestamp": "2026-11-05T21:28:14+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"

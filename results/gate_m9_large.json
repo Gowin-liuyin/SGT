@@ -1,0 +1,56 @@
+{
+  "gate": "m9",
+  "name": "large",
+  "module_entry": "Table 2：70B/32B 大模型训练（本机不可执行）",
+  "checks": [
+    {
+      "id": "c-files",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-models",
+      "expected": "{'llama-3.3-70b': 'meta-llama/Llama-3.3-70B-Instruct', 'qwen3-32b': 'Qwen/Qwen3-32B', 'deepseek-r1-70b': 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B'}",
+      "actual": "{'llama-3.3-70b': 'meta-llama/Llama-3.3-70B-Instruct', 'qwen3-32b': 'Qwen/Qwen3-32B', 'deepseek-r1-70b': 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B'}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-paper-protocol",
+      "expected": "epochs=2 & loss=mi,acs,mnp & fsdp2",
+      "actual": "{'epochs': 2} loss=['mi', 'acs', 'mnp'] par={'fsdp2': True, 'tp_size': 8, 'nodes': 64, 'gpus_per_node': 8}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-blocked",
+      "expected": "exit 3 + status=blocked + llm_loaded=false",
+      "actual": "exit=3 status=blocked llm_loaded=False",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-launch-command",
+      "expected": "含 torchrun/nnodes/nproc-per-node/fsdp2",
+      "actual": "torchrun --nnodes=64 --nproc-per-node=8 --rdzv-backend=c10d --rdzv-endpoint=${MASTER_ADDR:-localhost}:${MASTER_PORT:-295",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-dryrun",
+      "expected": "exit 0, mode=dry_run, 1 step finite",
+      "actual": "exit=0 mode=dry_run steps=1",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T21:28:56+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

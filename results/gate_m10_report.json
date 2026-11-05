@@ -1,0 +1,77 @@
+{
+  "gate": "m10",
+  "name": "report",
+  "module_entry": "Phase R：声明核对表 + 报告 + 回归",
+  "checks": [
+    {
+      "id": "c-claims-no-unknown",
+      "expected": "0 行 UNKNOWN",
+      "actual": "0 []",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-claims-evidence",
+      "expected": "每行有证据路径/说明",
+      "actual": "缺失 []",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-claims-verdicts",
+      "expected": "VERIFIED+FALSIFIED+BLOCKED == 全部行",
+      "actual": "{'VERIFIED': 10, 'FALSIFIED': 3, 'BLOCKED': 22}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-report-sections",
+      "expected": "10 节齐全",
+      "actual": "缺 []",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-report-no-placeholder",
+      "expected": "无占位符",
+      "actual": "[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-upstream-gates",
+      "expected": "11 个上游门禁 PASS",
+      "actual": "[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-results-exist",
+      "expected": "关键结果齐备",
+      "actual": "缺 []",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-state-all-pass",
+      "expected": "M0..M10（含 M8a/M8b）全 PASS",
+      "actual": "{'M0': 'PASS', 'M1': 'PASS', 'M2': 'PASS', 'M3': 'PASS', 'M4': 'PASS', 'M5': 'PASS', 'M6': 'PASS', 'M7': 'PASS', 'M8a': 'PASS', 'M8b': 'PASS', 'M9': 'PASS', 'M10': 'PASS'}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-runner-selftest",
+      "expected": "exit 0",
+      "actual": "exit 0",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T21:28:56+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

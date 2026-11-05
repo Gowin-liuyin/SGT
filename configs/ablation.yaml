@@ -16,17 +16,18 @@ sgt:
   ffn_mult: 4
   # 与 train.max_len 一致：可学习位置编码只在训练长度内被训练，
   # 评测 prompt 超过该长度时 SGT 无定义（M8 会显式报错而不是静默外推）。
-  max_len: 384
+  max_len: 256
   sigma_init: 1.0
 
 train:
-  steps: 400
+  steps: 250
   # 注意：PyYAML 把 `1e-4` 解析成字符串，写成 `1.0e-4` 才是 float（数值相同）。
   lr: 1.0e-4
-  # B=1、T=384：1B fp32 前向+反传实测 0.21s+0.07s、driver 7.1GB（16GB 机器可跑）。
-  # 论文未给 batch/长度（A12）；这一组同时保证 Alpaca/ARC 等评测 prompt 落在 SGT 训练过的长度内。
+  # B=1、T=256：在 16GB 机器上训练显存可控（T=384 会触发 swap，实测拖慢到 >10min/变体）。
+  # 论文未给 batch/长度（A12）；代价是 SGT 只对 ≤256 token 的序列有定义，
+  # Utility 评测因此只覆盖 prompt 长度在 256 以内的任务（HellaSwag 10-shot 判 BLOCKED）。
   batch_size: 1
-  max_len: 384
+  max_len: 256
   seed: 0
   grad_clip: 1.0
 

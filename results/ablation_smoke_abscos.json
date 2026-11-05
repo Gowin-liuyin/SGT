@@ -1,0 +1,571 @@
+{
+  "variant": "abscos",
+  "model": ".models/llama-3.2-1b-instruct",
+  "device": "mps",
+  "data_source": "rows_api",
+  "n_train_examples": 200,
+  "steps": 30,
+  "train_history": [
+    {
+      "step": 0,
+      "seed": 0,
+      "loss": 12.886439887806773,
+      "loss_u": 12.862838745117188,
+      "acs": 0.023601142689585686
+    },
+    {
+      "step": 1,
+      "seed": 0,
+      "loss": 12.92323069833219,
+      "loss_u": 12.896867752075195,
+      "acs": 0.0263629462569952
+    },
+    {
+      "step": 2,
+      "seed": 0,
+      "loss": 12.383976759389043,
+      "loss_u": 12.359251976013184,
+      "acs": 0.02472478337585926
+    },
+    {
+      "step": 3,
+      "seed": 0,
+      "loss": 12.278573030605912,
+      "loss_u": 12.251288414001465,
+      "acs": 0.027284616604447365
+    },
+    {
+      "step": 4,
+      "seed": 0,
+      "loss": 11.688482979312539,
+      "loss_u": 11.659771919250488,
+      "acs": 0.02871106006205082
+    },
+    {
+      "step": 5,
+      "seed": 0,
+      "loss": 11.04568974673748,
+      "loss_u": 11.012883186340332,
+      "acs": 0.03280656039714813
+    },
+    {
+      "step": 6,
+      "seed": 0,
+      "loss": 10.467183474451303,
+      "loss_u": 10.43136978149414,
+      "acs": 0.03581369295716286
+    },
+    {
+      "step": 7,
+      "seed": 0,
+      "loss": 9.686127915978432,
+      "loss_u": 9.640510559082031,
+      "acs": 0.04561735689640045
+    },
+    {
+      "step": 8,
+      "seed": 0,
+      "loss": 9.856370151042938,
+      "loss_u": 9.805085182189941,
+      "acs": 0.051284968852996826
+    },
+    {
+      "step": 9,
+      "seed": 0,
+      "loss": 10.509629711508751,
+      "loss_u": 10.456921577453613,
+      "acs": 0.052708134055137634
+    },
+    {
+      "step": 10,
+      "seed": 0,
+      "loss": 10.252297040075064,
+      "loss_u": 10.195000648498535,
+      "acs": 0.05729639157652855
+    },
+    {
+      "step": 11,
+      "seed": 0,
+      "loss": 10.644729018211365,
+      "loss_u": 10.590643882751465,
+      "acs": 0.0540851354598999
+    },
+    {
+      "step": 12,
+      "seed": 0,
+      "loss": 10.38218130171299,
+      "loss_u": 10.328862190246582,
+      "acs": 0.053319111466407776
+    },
+    {
+      "step": 13,
+      "seed": 0,
+      "loss": 10.331555217504501,
+      "loss_u": 10.28278636932373,
+      "acs": 0.048768848180770874
+    },
+    {
+      "step": 14,
+      "seed": 0,
+      "loss": 9.81310223415494,
+      "loss_u": 9.761004447937012,
+      "acs": 0.05209778621792793
+    },
+    {
+      "step": 15,
+      "seed": 0,
+      "loss": 10.093725755810738,
+      "loss_u": 10.047415733337402,
+      "acs": 0.046310022473335266
+    },
+    {
+      "step": 16,
+      "seed": 0,
+      "loss": 10.171951483935118,
+      "loss_u": 10.12279987335205,
+      "acs": 0.04915161058306694
+    },
+    {
+      "step": 17,
+      "seed": 0,
+      "loss": 9.332624271512032,
+      "loss_u": 9.280108451843262,
+      "acs": 0.052515819668769836
+    },
+    {
+      "step": 18,
+      "seed": 0,
+      "loss": 10.392485853284597,
+      "loss_u": 10.352957725524902,
+      "acs": 0.03952812775969505
+    },
+    {
+      "step": 19,
+      "seed": 0,
+      "loss": 9.582495659589767,
+      "loss_u": 9.535472869873047,
+      "acs": 0.04702278971672058
+    },
+    {
+      "step": 20,
+      "seed": 0,
+      "loss": 9.580051999539137,
+      "loss_u": 9.532751083374023,
+      "acs": 0.04730091616511345
+    },
+    {
+      "step": 21,
+      "seed": 0,
+      "loss": 9.184325732290745,
+      "loss_u": 9.139728546142578,
+      "acs": 0.044597186148166656
+    },
+    {
+      "step": 22,
+      "seed": 0,
+      "loss": 9.840344596654177,
+      "loss_u": 9.797633171081543,
+      "acs": 0.04271142557263374
+    },
+    {
+      "step": 23,
+      "seed": 0,
+      "loss": 8.895566321909428,
+      "loss_u": 8.848185539245605,
+      "acs": 0.047380782663822174
+    },
+    {
+      "step": 24,
+      "seed": 0,
+      "loss": 10.151233702898026,
+      "loss_u": 10.111159324645996,
+      "acs": 0.04007437825202942
+    },
+    {
+      "step": 25,
+      "seed": 0,
+      "loss": 9.000714745372534,
+      "loss_u": 8.956847190856934,
+      "acs": 0.043867554515600204
+    },
+    {
+      "step": 26,
+      "seed": 0,
+      "loss": 9.226276002824306,
+      "loss_u": 9.182171821594238,
+      "acs": 0.04410418123006821
+    },
+    {
+      "step": 27,
+      "seed": 0,
+      "loss": 9.336800783872604,
+      "loss_u": 9.290545463562012,
+      "acs": 0.04625532031059265
+    },
+    {
+      "step": 28,
+      "seed": 0,
+      "loss": 9.424443148076534,
+      "loss_u": 9.38182258605957,
+      "acs": 0.04262056201696396
+    },
+    {
+      "step": 29,
+      "seed": 0,
+      "loss": 9.0355662740767,
+      "loss_u": 8.989699363708496,
+      "acs": 0.04586691036820412
+    }
+  ],
+  "eval": {
+    "n_tokens": 500,
+    "metrics": {
+      "n_tokens": 500,
+      "vocab_size": 128256,
+      "nn_fr": 98.8,
+      "mrp_fr": 98.2,
+      "mrp_r_star": 4,
+      "ttr_10": 90.2,
+      "ttr_50": 81.0,
+      "symttr_10": 90.2,
+      "symttr_100": 72.39999999999999,
+      "hist_entropy": 0.4984341827727329,
+      "rank_mean": 7959.246,
+      "rank_median": 717.0,
+      "mi_feature_mean": 1.0049235777638854,
+      "mi_sum": 2058.0834872604373,
+      "mi_feature_median": 1.0029977722167969,
+      "pac_adv": 11.594127482023298
+    },
+    "feature_mi": {
+      "estimator": "Eq(8) 逐特征 MC 均值（A7）",
+      "n_pairs": 20000,
+      "n_tokens": 500,
+      "n_prime": 500,
+      "n_features": 2048,
+      "seed": 0,
+      "chunk": 1024,
+      "mi_feature_mean": 1.0049235777638854,
+      "mi_sum": 2058.0834872604373,
+      "mi_feature_median": 1.0029977722167969,
+      "mi_feature_std": 0.06352567888865511,
+      "mi_feature_min": 0.8068911193847657,
+      "mi_feature_max": 1.2417352935791015,
+      "pac_adv": 11.594127482023298,
+      "prime_source": "同一 Alpaca token 集的有放回抽样（近似 Eq (8) 的独立 batch）"
+    },
+    "sigma": {
+      "mean": 1.0063433415197651,
+      "std": 0.04407965786258442,
+      "min": 0.8253134489059448,
+      "max": 1.1931662559509277,
+      "log_sigma2_min": -0.3839839994907379,
+      "log_sigma2_max": 0.35322096943855286
+    },
+    "dataset": "tatsu-lab/alpaca",
+    "eval_examples": 50,
+    "eval_max_len": 64,
+    "eval_tokens_requested": 500,
+    "sequences": 11
+  },
+  "config_echo": {
+    "yaml_path": "configs/ablation.yaml",
+    "raw_yaml": {
+      "model": "unsloth/Llama-3.2-1B-Instruct",
+      "d": 2048,
+      "sgt": {
+        "hidden": 512,
+        "n_layers": 2,
+        "n_heads": 4,
+        "ffn_mult": 4,
+        "max_len": 384,
+        "sigma_init": 1.0
+      },
+      "train": {
+        "steps": 400,
+        "lr": 0.0001,
+        "batch_size": 1,
+        "max_len": 384,
+        "seed": 0,
+        "grad_clip": 1.0
+      },
+      "data": {
+        "dataset": "Open-Orca/OpenOrca",
+        "frac": 0.15,
+        "max_examples": 4000
+      },
+      "alphas": {
+        "mi": 0.00048828125,
+        "acs": 1.0,
+        "mnp": 1.0
+      },
+      "variants": {
+        "comp_entropy": {
+          "loss_terms": [
+            "cge"
+          ]
+        },
+        "cossim": {
+          "loss_terms": [
+            "bcs"
+          ]
+        },
+        "abscos": {
+          "loss_terms": [
+            "acs"
+          ]
+        },
+        "mi": {
+          "loss_terms": [
+            "mi"
+          ]
+        },
+        "mi_abscos": {
+          "loss_terms": [
+            "mi",
+            "acs"
+          ]
+        },
+        "mi_abscos_norm": {
+          "loss_terms": [
+            "mi",
+            "acs",
+            "mnp"
+          ]
+        }
+      }
+    },
+    "variant": "abscos",
+    "loss_terms": [
+      "acs"
+    ],
+    "weights": {
+      "acs": 1.0
+    },
+    "weights_echo": {
+      "weights": {
+        "acs": 1.0
+      },
+      "defaults": {
+        "mi": 0.00048828125,
+        "acs": 1.0,
+        "mnp": 1.0
+      },
+      "configured": {
+        "mi": 0.00048828125,
+        "acs": 1.0,
+        "mnp": 1.0
+      },
+      "sources": [
+        "alphas"
+      ],
+      "source": "config alphas",
+      "note": "α 是复现选择（SPEC A12，论文未给）；mi=1/d 用于抵消 Eq (8) 对 d 个特征的求和"
+    },
+    "sgt": {
+      "hidden": 512,
+      "n_layers": 2,
+      "n_heads": 4,
+      "ffn_mult": 4,
+      "max_len": 384,
+      "sigma_init": 1.0
+    },
+    "d": 2048,
+    "train": {
+      "steps": 30,
+      "lr": 0.0001,
+      "weight_decay": 0.0,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "dtype": "float32",
+      "loss_terms": [
+        "acs"
+      ],
+      "weights": {
+        "acs": 1.0
+      },
+      "log_every": 1,
+      "sigma_min": 1e-06,
+      "temperature": 1.0,
+      "checkpoint_dir": null
+    },
+    "median_norm_T": 0.9332589719140322,
+    "eval": {
+      "examples": 50,
+      "max_len": 64,
+      "tokens": 500,
+      "n_pairs": 20000,
+      "rank_chunk": 1024,
+      "aux_chunk": 130,
+      "eval_batch": 8,
+      "seed": 0,
+      "sampling": "x̃ = x + µ + exp(0.5·log σ²) ⊙ u（Eq (1)，固定 seed）"
+    },
+    "model": {
+      "path": ".models/llama-3.2-1b-instruct",
+      "dtype": "float32",
+      "frozen": true
+    },
+    "seed": 0
+  },
+  "data": {
+    "frac": 0.15,
+    "max_examples": 200,
+    "data_source": "rows_api",
+    "rows_api_fallback_reason": "local_parquet_missing",
+    "rows_meta": {
+      "cache_file": "/Users/yin/code/SGT/data_cache/openorca/train_first200.jsonl",
+      "config": "default",
+      "dataset": "Open-Orca/OpenOrca",
+      "fetched_at": "2026-11-05T12:06:31+00:00",
+      "frac": 0.15,
+      "n_fetched": 200,
+      "n_total": 2942029,
+      "pages": [
+        0
+      ],
+      "requested": 200,
+      "seed": 0,
+      "seed_affects_order": false,
+      "source": "datasets-server.huggingface.co/rows",
+      "split": "train",
+      "streaming": true,
+      "n_selected": 441305
+    },
+    "n_examples": 200,
+    "fingerprint": "958743522710a0c4"
+  },
+  "train_batches": {
+    "n_batches": 200,
+    "dropped_last": false,
+    "batch_size": 1,
+    "max_len": 384,
+    "padded_width": 384,
+    "n_examples": 200,
+    "tokens_per_epoch": 54508,
+    "seed": 0,
+    "note": "drop_last + 统一右 padding（MI pair 模式要求两侧同形）"
+  },
+  "checkpoint": "results/ckpt_abscos.pt",
+  "table1_reference": {
+    "source": "arXiv:2506.09452v1 Table 1（p.9，paper.txt 转录）",
+    "scale_note": "论文在 A100 上 300 步以上/6h 训练；本复现降规模（max_examples/steps 见 config_echo），数值不可直接与论文对照（SPEC §9 判定规则）。",
+    "variant": "abscos",
+    "row": {
+      "sgt_loss": "AbsCos",
+      "utility": -0.01,
+      "nn_fr": 94.9,
+      "mrp_fr": 94.9,
+      "symttr_10": 93.36,
+      "symttr_100": 92.86,
+      "hist_entropy": 87.62,
+      "mi": 6000000000.0,
+      "pac_adv": 100.0
+    },
+    "all_variants": {
+      "comp_entropy": {
+        "sgt_loss": "Comp. Entr.",
+        "utility": -13.84,
+        "nn_fr": 88.41,
+        "mrp_fr": 88.41,
+        "symttr_10": 75.99,
+        "symttr_100": 49.75,
+        "hist_entropy": 58.6,
+        "mi": 22.19,
+        "pac_adv": 100.0
+      },
+      "cossim": {
+        "sgt_loss": "CosSim",
+        "utility": -5.49,
+        "nn_fr": 99.98,
+        "mrp_fr": 3.21,
+        "symttr_10": 1.43,
+        "symttr_100": 1.07,
+        "hist_entropy": 2.47,
+        "mi": 3.2e+19,
+        "pac_adv": 100.0
+      },
+      "abscos": {
+        "sgt_loss": "AbsCos",
+        "utility": -0.01,
+        "nn_fr": 94.9,
+        "mrp_fr": 94.9,
+        "symttr_10": 93.36,
+        "symttr_100": 92.86,
+        "hist_entropy": 87.62,
+        "mi": 6000000000.0,
+        "pac_adv": 100.0
+      },
+      "mi": {
+        "sgt_loss": "MI",
+        "utility": -0.72,
+        "nn_fr": 34.43,
+        "mrp_fr": 34.43,
+        "symttr_10": 18.96,
+        "symttr_100": 17.39,
+        "hist_entropy": 23.96,
+        "mi": 1.48,
+        "pac_adv": 16.39
+      },
+      "mi_abscos": {
+        "sgt_loss": "MI+AbsCos",
+        "utility": -2.44,
+        "nn_fr": 81.23,
+        "mrp_fr": 81.23,
+        "symttr_10": 71.36,
+        "symttr_100": 66.88,
+        "hist_entropy": 75.72,
+        "mi": 1.91,
+        "pac_adv": 20.56
+      },
+      "mi_abscos_norm": {
+        "sgt_loss": "MI+AbsCos+Norm",
+        "utility": -1.97,
+        "nn_fr": 93.0,
+        "mrp_fr": 93.0,
+        "symttr_10": 90.42,
+        "symttr_100": 88.15,
+        "hist_entropy": 91.9,
+        "mi": 1.11,
+        "pac_adv": 12.69
+      }
+    }
+  },
+  "timings": {
+    "data_s": 0.01,
+    "lm_load_s": 23.003,
+    "sgt_init_s": 0.052,
+    "train_s": 35.835,
+    "ckpt_s": 0.059,
+    "eval_s": 0.855,
+    "total_s": 60.248
+  },
+  "meta": {
+    "timestamp": "2026-11-05T12:08:53+00:00",
+    "argv": [
+      "experiments/run_ablation.py",
+      "--config",
+      "configs/ablation.yaml",
+      "--variant",
+      "abscos",
+      "--device",
+      "mps",
+      "--max-steps",
+      "30",
+      "--max-examples",
+      "200",
+      "--eval-examples",
+      "50",
+      "--eval-max-len",
+      "64",
+      "--eval-tokens",
+      "500",
+      "--out",
+      "results/ablation_smoke_abscos.json"
+    ],
+    "torch_version": "2.15.0",
+    "torch_device": "mps",
+    "torch_dtype": "torch.float32"
+  }
+}
