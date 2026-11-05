@@ -17,7 +17,7 @@
 3. **端到端实验在降规模下只部分复现**：常数噪声（Fig.4）的 “Utility 掉 20pp 且 NN-FR≈0” 被复现（C21 VERIFIED）；
    MI 类损失确实比非 MI 损失压低 MI（C24 VERIFIED）；但 Table 1 的绝对数值与 Utility 列**未复现**（C8–C13、C23、C27 判 BLOCKED，F32）。
 4. **70B 实验（Table 2）不可执行**，只交付脚本与启动命令（D4，M9 BLOCKED）。
-5. 声明核对表 35 条：**12 VERIFIED / 2 FALSIFIED / 21 BLOCKED / 0 UNKNOWN**。
+5. 声明核对表 35 条：**10 VERIFIED / 3 FALSIFIED / 22 BLOCKED / 0 UNKNOWN**。
 
 ## 1. 复现范围
 
@@ -127,9 +127,9 @@ Fig.4（常数高斯噪声，2000 token；ε 用 Δ=embedding 范数 p99=1.1267�
 
 | 判定 | 数量 | 条目 |
 |---|---|---|
-| VERIFIED | 12 | C1、C2、C3、C5、C6、C7、C21、C24、C32、C34、C33 中的协议部分 |
-| FALSIFIED | 2 | C4（Eq 6 不是上界）、C35（MI 不是 MI）；另有 C31 论文内部矛盾 |
-| BLOCKED | 21 | C8–C20、C22、C23、C25–C30 |
+| VERIFIED | 10 | C1、C2、C3、C5、C6、C7、C21、C24、C32、C34 |
+| FALSIFIED | 3 | C4（Eq 6 不是上界）、C31（结论与 Table 1 自相矛盾，F16）、C35（MI 不是 MI） |
+| BLOCKED | 22 | C8–C20、C22、C23、C25–C30、C33 |
 | UNKNOWN | 0 | — |
 
 ## 8. 复跑方式
