@@ -12,8 +12,8 @@
 | **M4** | 指标与攻击 | M1 | `src/sgt/metrics.py`、`src/sgt/attacks.py`、`tests/test_metrics.py` | `gate_m4_metrics.py` | 秩/NN/MRP/TTR/SymTTR/Histent 在解析构造上的精确值；SymTTR≤TTR；恒等变换 FR=0、TTR=0；MI-MC 与解析 1 维 GMM 误差 ≤2%；PAC 单调性；BeamClean 无噪声≈NN、随 $\sigma$ 单调 |
 | **M5** | 数据管线 | M0 | `src/sgt/data.py`、`configs/data.yaml`、`tests/test_data.py` | `gate_m5_data.py` | OpenOrca 15% 条数可复算且哈希记录；Alpaca 评估集与训练集零重叠；PUPA 可解析；tokenize→decode 往返一致；batch 形状/mask 正确；同 seed 顺序一致 |
 | **M6** | 训练回路 | M2、M3、M4、M5 | `src/sgt/train.py`、`experiments/train_sgt.py`、`configs/ablation.yaml`、`tests/test_train.py` | `gate_m6_train.py` | 冻结 LM 参数在训练前后逐位相同（哈希）；SGT 参数变化；$L_U$ 与手写 CE 逐值一致（同分布时 = $H(p_{\text{clean}})$，one-hot 极限为 0）；10 步 smoke 损失下降；同 seed 两次运行 checkpoint 位一致；超参全部写入结果 JSON |
-| **M7** | 消融实验 | M6 | `experiments/run_ablation.py`、`run_constant_noise.py`、`results/*.json` | `gate_m7_ablation.py` | 6 种 loss 配置各产出完整 8 指标；Fig.3/Fig.4 数据可生成；常数噪声扫描单调性断言；结果与 Table 1 对照表生成（含偏差与 BLOCKED 标注）；不得缺列 |
-| **M8** | Utility / PII | M6、M7 | `src/sgt/utility.py`、`src/sgt/pii.py`、`experiments/run_pupa.py` | `gate_m8_utility.py` | lm-eval 基线可复跑且 8 任务名齐全；Utility 聚合公式与手算一致；PII-Ratio 恒等文本≈1；PUPA 指标 schema 完整；失败任务记 BLOCKED 而非跳过 |
+| **M7** | 消融实验 | M6 | `experiments/run_ablation.py`、`run_constant_noise.py`、`results/*.json` | `gate_m7_ablation.py` | 6 种 loss 配置各产出 7 项嵌入侧指标（NN-FR/MRP-FR/TTR-10/TTR-50/SymTTR-10/SymTTR-100/Hist.Entr./MI/PAC-Adv）+ checkpoint；Fig.3 秩直方图数据；常数噪声扫描单调；与 Table 1 对照表（Utility 列由 M8 补）；不得缺列 |
+| **M8** | Utility / PII | M6、M7 | `src/sgt/utility.py`、`src/sgt/pii.py`、`experiments/run_pupa.py` | `gate_m8_utility.py` + `gate_m8_pii.py` | lm-eval 基线可复跑且任务名齐全；SGT 注入后 utility_pp 可计算；PII-Ratio 恒等文本=1（截断参考口径）；PUPA NN/BeamClean schema 完整；失败任务记 BLOCKED 而非跳过 |
 | **M9** | 大模型脚本 | M8 | `experiments/run_large_models.py`、`configs/large_models.yaml` | `gate_m9_large.py` | 三模型配置与 loss 组合静态断言；`--dry-run` 用 tiny 模型跑通 1 步；FSDP2/TP 参数存在但本地不启用；执行状态记 BLOCKED |
 | **M10** | 报告与回归 | M1..M9 | `REPRODUCTION_REPORT.md`、`docs/CLAIMS_CHECKLIST.md` 终版、`REPRO_STATE.md` | `gate_m10_report.py` | 核对表无 UNKNOWN；每条 VERIFIED/FALSIFIED/BLOCKED 有证据路径；报告中每个数字可在 `results/` 找到；重跑全部上游门禁无回退 |
 
