@@ -1,0 +1,64 @@
+{
+  "tag": "utility_smoke_base",
+  "model": ".models/tiny-llama",
+  "tasks": [
+    "arc_easy"
+  ],
+  "limit": 2,
+  "device": "cpu",
+  "sgt_ckpt": null,
+  "results": {
+    "arc_easy": {
+      "name": "arc_easy",
+      "alias": "arc_easy",
+      "sample_len": 2,
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.5,
+      "acc_norm,none": 0.5,
+      "acc_norm_stderr,none": 0.5
+    }
+  },
+  "meta": {
+    "timestamp": "2026-11-05T11:46:28.674535+00:00",
+    "duration_s": 9.761,
+    "batch_size": 1,
+    "argv": [
+      "experiments/run_utility.py",
+      "--model",
+      ".models/tiny-llama",
+      "--tasks",
+      "arc_easy",
+      "--limit",
+      "2",
+      "--batch-size",
+      "1",
+      "--device",
+      "cpu",
+      "--out",
+      "results/utility_smoke_base.json"
+    ],
+    "lm_eval_version": "0.4.13",
+    "transformers_version": "5.22.1",
+    "torch_version": "2.15.0",
+    "model_config": {
+      "hidden_size": 64,
+      "num_hidden_layers": 2,
+      "num_attention_heads": 4,
+      "tie_word_embeddings": false
+    },
+    "n_samples": {
+      "arc_easy": {
+        "original": 2376,
+        "effective": 2
+      }
+    },
+    "n_shot": {
+      "arc_easy": 0
+    },
+    "versions": {
+      "arc_easy": 1.0
+    },
+    "group_subtasks": {},
+    "sgt": null
+  }
+}

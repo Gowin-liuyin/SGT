@@ -16,6 +16,13 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from gates.common import Gate  # noqa: E402
 
 
+def as_rows(ds, n=None):
+    """datasets.Dataset -> list[dict]（切片 Dataset 会得到列式 dict，不能直接迭代）。"""
+    total = len(ds)
+    k = total if n is None else min(n, total)
+    return [ds[i] for i in range(k)]
+
+
 def main() -> int:
     g = Gate("m5", "data", module_entry="§7 p.9：OpenOrca 15%、Alpaca 评估、PUPA")
     try:
@@ -37,12 +44,14 @@ def main() -> int:
     # 2) OpenOrca 加载确定性
     o1 = D.load_openorca(frac=0.15, max_examples=200)
     o2 = D.load_openorca(frac=0.15, max_examples=200)
-    f1, f2 = D.dataset_fingerprint(o1, n=200), D.dataset_fingerprint(o2, n=200)
+    o1_rows, o2_rows = as_rows(o1), as_rows(o2)
+    f1, f2 = D.dataset_fingerprint(o1_rows, n=200), D.dataset_fingerprint(o2_rows, n=200)
     g.check("c-openorca-deterministic", expected="len=200 & identical fingerprint",
             actual=f"len={len(o1)} fp={f1}=={f2}", passed=len(o1) == 200 and f1 == f2)
 
     # 3) Alpaca + build_prompt 精确断言
-    a = D.load_alpaca(max_examples=100)
+    a_ds = D.load_alpaca(max_examples=100)
+    a = as_rows(a_ds)
     ex1 = {"instruction": "Q1", "input": "", "output": "A1"}
     ex2 = {"instruction": "Q2", "input": "ctx", "output": "A2"}
     p1 = D.build_prompt(ex1, "alpaca")
@@ -52,13 +61,13 @@ def main() -> int:
             passed=len(a) == 100 and p1 == "Q1\nA1" and p2 == "Q2\nctx\nA2")
 
     # 4) 训练/评估文本不重叠
-    s_train = {D.build_prompt(e, "openorca") for e in o1}
+    s_train = {D.build_prompt(e, "openorca") for e in o1_rows}
     s_eval = {D.build_prompt(e, "alpaca") for e in a[:50]}
     g.check("c-disjoint", expected="intersection == 0", actual=len(s_train & s_eval),
             passed=len(s_train & s_eval) == 0)
 
     # 5) PUPA：字段选择必须是 user_query（SPEC A20）
-    pu = D.load_pupa(config="pupa_tnb", max_examples=20)
+    pu = as_rows(D.load_pupa(config="pupa_tnb", max_examples=20))
     row = pu[0]
     prompt = D.build_prompt(row, "pupa")
     used_user_query = prompt.strip() == str(row.get("user_query", "")).strip()
@@ -75,11 +84,11 @@ def main() -> int:
     if tok is None:
         from transformers import AutoTokenizer
         tok = AutoTokenizer.from_pretrained("unsloth/Llama-3.2-1B-Instruct")
-    enc = D.tokenize_examples(o1[:20], tok, max_len=128, dataset="openorca")
+    enc = D.tokenize_examples(o1_rows[:20], tok, max_len=128, dataset="openorca")
     sims = []
     for i, ids in enumerate(enc["input_ids"]):
         txt = tok.decode(ids, skip_special_tokens=True)
-        src = D.build_prompt(o1[i], "openorca")
+        src = D.build_prompt(o1_rows[i], "openorca")
         # 字符级相似度（按较短串归一）
         common = sum(1 for ch in txt if ch in src)
         sims.append(common / max(1, len(txt)))
@@ -87,8 +96,8 @@ def main() -> int:
             passed=min(sims) > 0.9)
 
     # 7) batch 契约
-    b1 = next(iter(D.make_batches(o1, tok, batch_size=4, max_len=64, seed=3, dataset_name="openorca")))
-    b2 = next(iter(D.make_batches(o1, tok, batch_size=4, max_len=64, seed=3, dataset_name="openorca")))
+    b1 = next(iter(D.make_batches(o1_rows, tok, batch_size=4, max_len=64, seed=3, dataset_name="openorca")))
+    b2 = next(iter(D.make_batches(o1_rows, tok, batch_size=4, max_len=64, seed=3, dataset_name="openorca")))
     import torch
     same = torch.equal(b1["input_ids"], b2["input_ids"])
     shapes_ok = b1["input_ids"].shape == b1["attention_mask"].shape

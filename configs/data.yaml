@@ -1,4 +1,4 @@
-# M5 数据管线配置（SPEC §5 / D2 / A13）
+# M5 数据管线配置（SPEC §5 / D2 / A13 / A20）
 # 论文协议：OpenOrca 15% 训练、Alpaca 评估；本地降规模由 max_examples 截断。
 seed: 0
 max_len: 128
@@ -24,6 +24,6 @@ pupa:
   dataset: Columbia-NLP/PUPA
   config: pupa_tnb # pupa_tnb → PUPA_TNB.csv（237 条）；pupa_new → PUPA_New.csv（664 条）
   split: train
-  text_field: target_response # 最长的自然语言文本字段
+  text_field: user_query # SPEC A20：含 PII 的原始用户输入（redacted_query 已脱敏）
   fields:
     [conversation_hash, predicted_category, user_query, target_response, pii_units, redacted_query]

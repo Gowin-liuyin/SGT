@@ -5,10 +5,11 @@
 - OpenOrca / Alpaca 只走 Hugging Face datasets-server 的逐页 rows 接口
   （``GET /rows?dataset=...&offset=...&length=100``），**不下载 parquet**
   （本机带宽约 1 MB/s，1 GB+ 的 parquet 不可接受）。
-- 逐页请求之间至少间隔 ``PAGE_INTERVAL_SECONDS`` 秒，避免 datasets-server 前置
-  CDN 对突发分页请求返回 429（实测连续约 24 页触发，约 3 分钟后恢复）。
+- 逐页请求之间至少间隔 ``PAGE_INTERVAL_SECONDS`` 秒；若仍遇 429，则按
+  ``RATE_LIMIT_DELAYS`` 长退避（CDN 限流窗口实测约 1–3 分钟）。
 - PUPA 文件很小（< 1 MB），优先 ``datasets.load_dataset``；失败时回退到直接
   下载 CSV（``https://huggingface.co/datasets/Columbia-NLP/PUPA/resolve/main/...``）。
+  PUPA 文本字段按 SPEC A20 固定为 ``user_query``（含 PII 的原始用户输入）。
 - 返回顺序由数据集原始顺序决定，所有函数确定性；OpenOrca / Alpaca 缓存写入
   ``data_cache/<dataset>/train_first{N}.jsonl``（每行一个样本），并记录
   ``meta.json``（n_total / n_fetched / 抓取时间 / 每页 offset）。
@@ -47,12 +48,14 @@ DEFAULT_CACHE_DIR = _REPO_ROOT / "data_cache"
 
 ROWS_ENDPOINT = "https://datasets-server.huggingface.co/rows"
 PAGE_SIZE = 100  # datasets-server rows 接口单页上限
-MAX_RETRIES = 3  # 失败重试 3 次（退避 2/4/8 s）
+MAX_RETRIES = 3  # 失败重试 3 次（普通错误退避 2/4/8 s）
 RETRY_BASE_DELAY = 2.0
 REQUEST_TIMEOUT = 30.0
 # 逐页请求之间的最小间隔：datasets-server 前置 CloudFront 对突发请求返回 429
-# （实测连续 ~24 页触发，约 3 分钟后恢复）。3 s 间隔可稳定取完 4000 条（40 页）。
-PAGE_INTERVAL_SECONDS = 3.0
+# （实测：24 页 ≈40 s、33 页 ≈160 s 均触发，恢复窗口约 1–3 分钟）。
+PAGE_INTERVAL_SECONDS = 6.0
+# 429 专用退避：CDN 限流窗口长于普通网络抖动，沿用 3 次重试但等待更久。
+RATE_LIMIT_DELAYS = (30.0, 60.0, 120.0)
 
 OPENORCA_DATASET = "Open-Orca/OpenOrca"
 OPENORCA_CONFIG = "default"
@@ -69,10 +72,12 @@ DEFAULT_ALPACA_MAX_EXAMPLES = 1000
 
 PUPA_DATASET = "Columbia-NLP/PUPA"
 PUPA_CONFIGS = {"pupa_tnb": "PUPA_TNB.csv", "pupa_new": "PUPA_New.csv"}
-# 最长的自然语言文本字段（实测均值长度：pupa_tnb 1329.9 字符 / pupa_new 1638.7，
-# 均长于 user_query 与 redacted_query；见交付报告）。字段缺失时按顺序回退。
-PUPA_TEXT_FIELD = "target_response"
-PUPA_FALLBACK_FIELDS = ("user_query", "redacted_query")
+# SPEC A20：PUPA 文本字段固定为 user_query（含 PII 的原始用户输入）。
+# 实测字段均值长度（pupa_tnb / pupa_new，字符）：user_query 1201.6 / 1221.5，
+# target_response 1329.9 / 1638.7，redacted_query 1049.6 / 1191.7。
+# 未按“最长字段”选 target_response 的理由见 SPEC A20：SGT 保护的是输入，
+# redacted_query 已脱敏（PII-Ratio 失去意义），target_response 是模型输出。
+PUPA_TEXT_FIELD = "user_query"
 PUPA_CSV_URL = "https://huggingface.co/datasets/Columbia-NLP/PUPA/resolve/main/{name}"
 
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler())
@@ -107,7 +112,11 @@ class ExampleList(list):
 
 
 def _fetch_bytes(url: str) -> bytes:
-    """GET ``url``，失败重试 ``MAX_RETRIES`` 次（退避 2/4/8 s），超时 30 s。"""
+    """GET ``url``，失败重试 ``MAX_RETRIES`` 次，超时 30 s。
+
+    普通网络错误/5xx 退避 2/4/8 s（任务单约定）；429 是 CDN 限流，按
+    ``RATE_LIMIT_DELAYS``（30/60/120 s，实测恢复窗口 1–3 分钟）退避。
+    """
     last: Exception | None = None
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -118,10 +127,17 @@ def _fetch_bytes(url: str) -> bytes:
             if exc.code not in (429, 500, 502, 503, 504):
                 raise RuntimeError(f"HTTP {exc.code} {exc.reason}: {url}") from exc
             last = exc
+            delay = (
+                RATE_LIMIT_DELAYS[min(attempt, len(RATE_LIMIT_DELAYS) - 1)]
+                if exc.code == 429
+                else RETRY_BASE_DELAY * (2**attempt)
+            )
+            if attempt < MAX_RETRIES:
+                time.sleep(delay)
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             last = exc
-        if attempt < MAX_RETRIES:
-            time.sleep(RETRY_BASE_DELAY * (2**attempt))
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_BASE_DELAY * (2**attempt))
     raise RuntimeError(f"请求失败（{MAX_RETRIES} 次重试后）: {url}: {last!r}") from last
 
 
@@ -471,7 +487,7 @@ def load_pupa(
     优先 ``datasets.load_dataset("Columbia-NLP/PUPA", config, split="train")``；
     失败时回退到直接下载 CSV。字段：
     ``conversation_hash, predicted_category, user_query, target_response,
-    pii_units, redacted_query``。
+    pii_units, redacted_query``；文本字段按 SPEC A20 固定为 ``user_query``。
     """
     if config not in PUPA_CONFIGS:
         raise ValueError(
@@ -536,8 +552,8 @@ def build_prompt(example: dict, dataset: str) -> str:
 
     - OpenOrca: ``system_prompt + "\\n" + question + "\\n" + response``（空字段跳过）
     - Alpaca:   ``instruction + ("\\n" + input if input else "") + "\\n" + output``
-    - PUPA:     最长的自然语言文本字段 ``target_response``；为空时依次回退
-      ``user_query`` / ``redacted_query``。
+    - PUPA:     数据集自带文本字段 ``user_query``（SPEC A20：含 PII 的原始输入）；
+      缺失或为空时抛 ``ValueError``，不回退到其他字段。
     """
     name = _normalise_dataset(dataset)
     example = example or {}
@@ -556,12 +572,11 @@ def build_prompt(example: dict, dataset: str) -> str:
         if inp:
             prompt = f"{prompt}\n{inp}"
         return f"{prompt}\n{output}"
-    # pupa
-    for field in (PUPA_TEXT_FIELD, *PUPA_FALLBACK_FIELDS):
-        value = example.get(field)
-        if value:
-            return str(value)
-    return ""
+    # pupa（SPEC A20：固定 user_query）
+    value = example.get(PUPA_TEXT_FIELD)
+    if value is None or str(value).strip() == "":
+        raise ValueError(f"PUPA 样例缺少非空文本字段 {PUPA_TEXT_FIELD!r}")
+    return str(value)
 
 
 def _to_texts(examples: Sequence[str | dict], dataset: str | None) -> list[str]:

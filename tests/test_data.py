@@ -145,14 +145,11 @@ def test_05_pupa_20_fields_and_prompt():
         prompt = D.build_prompt(row, "pupa")
         assert prompt and prompt.strip()
 
-    # 首选字段即 target_response；缺失时回退 user_query
-    assert D.build_prompt(examples[0], "pupa") == examples[0]["target_response"]
-    assert (
-        D.build_prompt(
-            {"target_response": None, "user_query": "Q", "redacted_query": "R"}, "pupa"
-        )
-        == "Q"
-    )
+    # SPEC A20：文本字段固定 user_query；不回退到 target_response
+    assert D.build_prompt(examples[0], "pupa") == examples[0]["user_query"]
+    assert D.build_prompt(examples[0], "pupa") != examples[0]["target_response"]
+    with pytest.raises(ValueError):
+        D.build_prompt({"target_response": "R", "redacted_query": "X"}, "pupa")
     print(f"PUPA prompt[0] 长度 = {len(D.build_prompt(examples[0], 'pupa'))}")
 
 

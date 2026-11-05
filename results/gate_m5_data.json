@@ -41,15 +41,15 @@
     {
       "id": "c-pupa-load",
       "expected": "20 rows & non-empty prompt",
-      "actual": "len=20 prompt_len=182",
+      "actual": "len=20 prompt_len=456",
       "pass": true,
       "detail": ""
     },
     {
       "id": "c-pupa-field",
       "expected": "build_prompt == user_query (SPEC A20)",
-      "actual": "equals_user_query=False differs_from_target_response=False",
-      "pass": false,
+      "actual": "equals_user_query=True differs_from_target_response=True",
+      "pass": true,
       "detail": "fields=['conversation_hash', 'pii_units', 'predicted_category', 'redacted_query', 'target_response', 'user_query']"
     },
     {
@@ -67,9 +67,9 @@
       "detail": ""
     }
   ],
-  "pass": false,
-  "status": "FAIL",
-  "timestamp": "2026-11-05T19:30:22+0800",
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:48:30+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"
