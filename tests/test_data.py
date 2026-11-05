@@ -7,7 +7,10 @@ tokenize→decode 往返、batch 形状/mask/确定性。
 
 from __future__ import annotations
 
+import inspect
+import json
 import math
+import shutil
 import sys
 import time
 from difflib import SequenceMatcher
@@ -22,6 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from sgt import data as D  # noqa: E402
 
 TOKENIZER_NAME = "unsloth/Llama-3.2-1B-Instruct"
+# OpenOrca 真实总量（两个 parquet footer 行数之和）= 994,896 + 3,239,027
+PARQUET_FILES = {
+    "1M-GPT4-Augmented.parquet": 994896,
+    "3_5M-GPT3_5-Augmented.parquet": 3239027,
+}
+PARQUET_N_TOTAL = sum(PARQUET_FILES.values())  # 4,233,923
+SERVER_PARTIAL_N_TOTAL = 2942029  # datasets-server partial 索引，非真实总量
 PUPA_FIELDS = {
     "conversation_hash",
     "predicted_category",
@@ -43,9 +53,116 @@ def test_01_openorca_counts():
     print(f"openorca_counts = {counts}")
     assert counts["frac"] == 0.15
     assert counts["n_total"] > 0
+    assert counts["n_total_source"] in {"parquet_footer", "server_partial"}
+    if counts["n_total_source"] == "parquet_footer":
+        # 真实总量 = 两个 parquet footer 行数之和（论文 15% 的分母）
+        assert counts["n_total"] == PARQUET_N_TOTAL == 4233923
+        size_path = D.DEFAULT_CACHE_DIR / "openorca" / D.DATASET_SIZE_FILE
+        size = json.loads(size_path.read_text(encoding="utf-8"))
+        print(f"dataset_size.json = {size}")
+        assert size["source"] == "parquet_footer"
+        assert size["n_total"] == PARQUET_N_TOTAL
+        assert size["files"] == PARQUET_FILES
+        assert size["read_at"]
+    else:  # 无 footer 可用时回退 datasets-server 的部分索引
+        assert counts["n_total"] == SERVER_PARTIAL_N_TOTAL
     assert counts["n_selected"] == math.ceil(0.15 * counts["n_total"])
     assert isinstance(counts["n_fetched"], int)
     assert counts["n_fetched"] >= 0
+
+
+# 1b) seed 不影响顺序 + 缓存命中 -------------------------------------------- #
+def test_01b_openorca_seed_does_not_change_order(monkeypatch):
+    t0 = time.perf_counter()
+    seed0 = D.load_openorca(max_examples=200, seed=0)
+    t1 = time.perf_counter()
+    seed123 = D.load_openorca(max_examples=200, seed=123)
+    t2 = time.perf_counter()
+    fp0, fp123 = D.dataset_fingerprint(seed0), D.dataset_fingerprint(seed123)
+    print(
+        f"OpenOrca seed=0 耗时={t1 - t0:.4f}s seed=123 耗时={t2 - t1:.4f}s "
+        f"指纹 {fp0} vs {fp123}（应相同）"
+    )
+    assert fp0 == fp123
+    assert [row["id"] for row in seed0] == [row["id"] for row in seed123]
+    assert seed0.meta["seed_affects_order"] is False
+    # 缓存命中：禁止 rows 接口后仍能取到同样数据（说明没有重新抓取）
+    assert (t2 - t1) < 5.0, "缓存命中耗时应可忽略（首次抓取 ≥ PAGE_INTERVAL_SECONDS）"
+
+    def _no_network(*args, **kwargs):
+        raise AssertionError("缓存命中时不应再请求 rows 接口")
+
+    monkeypatch.setattr(D, "_rows_page", _no_network)
+    t3 = time.perf_counter()
+    seed7 = D.load_openorca(max_examples=200, seed=7)
+    print(f"OpenOrca seed=7（禁用网络）耗时={time.perf_counter() - t3:.4f}s")
+    assert D.dataset_fingerprint(seed7) == fp0
+
+
+# 1c) load_openorca 签名（训练 CLI 绑定 + 参数校验） ------------------------ #
+def test_01c_load_openorca_signature():
+    sig = inspect.signature(D.load_openorca)
+    print(f"load_openorca 签名 = {sig}")
+    params = sig.parameters
+    required = (
+        "frac",
+        "max_examples",
+        "split",
+        "streaming",
+        "seed",
+        "cache_dir",
+        "force_refresh",
+    )
+    for name in required:
+        assert name in params, f"load_openorca 缺少参数 {name!r}"
+    assert params["seed"].default == 0
+    assert params["split"].default == "train"
+    assert params["streaming"].default is True
+    # experiments/train_sgt.py:138 的真实调用方式必须能绑定
+    bound = sig.bind(frac=0.15, max_examples=4, seed=0, cache_dir="data_cache")
+    print(f"训练 CLI 绑定 = {bound}")
+    assert bound.arguments["max_examples"] == 4
+
+    with pytest.raises(ValueError):
+        D.load_openorca(split="validation")
+    with pytest.raises(TypeError):
+        D.load_openorca(streaming=1)
+
+
+# 1d) streaming=False 复用同一份缓存（不触发 datasets.load_dataset 下载） --- #
+def test_01d_streaming_false_uses_shared_cache(tmp_path, monkeypatch):
+    src = D.DEFAULT_CACHE_DIR / "openorca" / "train_first200.jsonl"
+    if not src.exists():
+        pytest.skip("缺少 OpenOrca 200 条缓存")
+    base = tmp_path / "openorca"
+    base.mkdir()
+    shutil.copy2(src, base / "train_first200.jsonl")
+    (base / "meta.json").write_text(
+        json.dumps(
+            {
+                "dataset": D.OPENORCA_DATASET,
+                "config": D.OPENORCA_CONFIG,
+                "split": "train",
+                "n_total": SERVER_PARTIAL_N_TOTAL,
+            }
+        ),
+        encoding="utf-8",
+    )
+    import datasets
+
+    def _no_download(*args, **kwargs):
+        raise AssertionError("缓存命中时不应调用 datasets.load_dataset")
+
+    monkeypatch.setattr(datasets, "load_dataset", _no_download)
+
+    t0 = time.perf_counter()
+    local = D.load_openorca(max_examples=200, streaming=False, cache_dir=tmp_path)
+    print(f"streaming=False 缓存命中耗时={time.perf_counter() - t0:.4f}s")
+    assert len(local) == 200
+    assert local.meta["streaming"] is False
+    assert D.dataset_fingerprint(local) == D.dataset_fingerprint(
+        D.load_openorca(max_examples=200)
+    )
 
 
 # 2) OpenOrca 200 条：条数 + 指纹确定性 ------------------------------------- #

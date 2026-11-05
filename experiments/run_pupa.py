@@ -19,19 +19,26 @@
 4. 有 ``--sgt-ckpt`` 时 ``mu, lv = sgt(x, mask)``，``x̃ = sample_sgt(x, mu, exp(0.5·lv))``
    （固定 seed 的显式 ``torch.Generator``）；否则 ``x̃ = x``（无保护的基线）。
 5. NN：``nn_attack(x̃.reshape(-1, d), table)``，只与 ``attention_mask=1`` 的有效 token 比较得到 FR。
-6. BeamClean：``beamclean`` + 由 ``make_lm_score_fn`` 提供的前缀 log-prob 打分；逐样本调用
-   （每样本只取有效 token 位置，padding 不进入攻击），记录 ``sigma_hat``。
-   ``--skip-beamclean`` 时跳过，但结果 JSON 里显式记 ``status="skipped"``，不静默。
-7. 重建 ids 解码成文本（只解码有效 token，``skip_special_tokens=True``），对原始
-   ``user_query`` 计算 ``pii_ratio`` 与 ``pii_units_recovered``（NN 与 BeamClean 各一份）。
+6. BeamClean：``beamclean`` + 由 ``make_lm_score_fn`` 提供的**标准自回归**前缀对数似然
+   ``Σ_{i=2..t} log p(token_i | token_<i)``（``logits[:, :-1]`` 对 ``tokens[:, 1:]``，
+   ``t == 1`` 为 0）；逐样本调用（每样本只取有效 token 位置，padding 不进入攻击），
+   记录 ``sigma_hat``。``--skip-beamclean`` 时跳过，但结果 JSON 里显式记
+   ``status="skipped"``，不静默。
+7. 重建 ids 与原始 ids 都只解码有效 token（``skip_special_tokens=True``）；PII-Ratio 的
+   分母参考文本 ``T_ref`` 用**模型实际看到的**截断后解码文本（不是完整 ``user_query``），
+   逐样本另记完整原文 ``user_query``、``pii_reference_text``（= ``T_ref``）与
+   ``pii_ratio_full``（对完整原文的比值，审计对照）。
 8. 结果写 ``--out``（JSON），逐样本明细（含原始文本与重建文本）写同名 ``_rows.jsonl``。
 
 指标口径（本文件内统一）：
 
 - FR = ``100 · #{重建 ≠ 真 token} / #{有效 token}``（padding 不计；跨样本按 token 汇总，
   即逐样本 FR 的 token 数加权平均），复用 :func:`sgt.metrics.failure_rate` 的公式。
-- PII-Ratio 与片段恢复率的定义见 :mod:`sgt.pii`；**不是** PAPILLON 的 LLM-as-judge 口径
-  （A10），结果 JSON 的 ``meta.pii_definition`` 会写明，报告里同样声明。
+- PII-Ratio 与片段恢复率的定义见 :mod:`sgt.pii`；分母参考文本 ``T_ref`` 是
+  ``tokenizer.decode(截断到 max_len 后的有效 token ids, skip_special_tokens=True)``，
+  即模型实际看到的文本（``meta.pii_reference = "truncated_decoded"``）。**不是**
+  PAPILLON 的 LLM-as-judge 口径（A10），结果 JSON 的 ``meta.pii_definition`` 会写明，
+  报告里同样声明。
 - 所有浮点在写盘前做有限性清洗：``NaN/±Inf`` 统一变成 ``null``（``None``）。
 
 BeamClean 的成本：每个样本约 ``T × beam × topk`` 次 LM 前向（``_beam_decode_one`` 每步按
@@ -154,11 +161,32 @@ def _sanitize(obj):
     return str(obj)
 
 
-def _pii_fields(original: str, reconstructed: str, units: Sequence[str]) -> dict:
-    """一次算齐 PII-Ratio 与片段恢复率（供逐样本记录使用）。"""
-    ratio = pii_ratio(original, reconstructed, units)
-    recovered = pii_units_recovered(original, reconstructed, units)
-    return {
+def _pii_fields(
+    reference: str,
+    reconstructed: str,
+    units: Sequence[str],
+    *,
+    full_text: str | None = None,
+) -> dict:
+    """一次算齐 PII-Ratio 与片段恢复率（供逐样本记录使用）。
+
+    Args:
+        reference: 分母参考文本 ``T_ref``——模型实际看到的有效 token 解码出的文本
+            （``tokenizer.decode(有效 ids, skip_special_tokens=True)``）。
+            主字段 ``pii_ratio`` / ``pii_orig`` / ``pii_rec`` / 片段恢复率都基于它。
+        reconstructed: 重建文本 ``T*``。
+        units: PUPA 的 ``pii_units``。
+        full_text: 完整 ``user_query``；给出时额外记录 ``pii_ratio_full``（分母为完整
+            原文，旧口径），只用于审计对照，不参与 ``pii_ratio``。
+
+    Returns:
+        ``pii_orig/pii_rec/pii_ratio/pii_ratio_defined/n_units/n_recovered/
+        recovered_frac``，以及（``full_text`` 非空时）``pii_ratio_full`` /
+        ``pii_ratio_full_defined``。
+    """
+    ratio = pii_ratio(reference, reconstructed, units)
+    recovered = pii_units_recovered(reference, reconstructed, units)
+    fields = {
         "pii_orig": float(ratio["pii_orig"]),
         "pii_rec": float(ratio["pii_rec"]),
         "pii_ratio": ratio["ratio"],
@@ -167,6 +195,11 @@ def _pii_fields(original: str, reconstructed: str, units: Sequence[str]) -> dict
         "n_recovered": int(recovered["n_recovered"]),
         "recovered_frac": float(recovered["recovered_frac"]),
     }
+    if full_text is not None:
+        full = pii_ratio(full_text, reconstructed, units)
+        fields["pii_ratio_full"] = full["ratio"]
+        fields["pii_ratio_full_defined"] = bool(full["defined"])
+    return fields
 
 
 # --------------------------------------------------------------------------- #
@@ -175,11 +208,18 @@ def _pii_fields(original: str, reconstructed: str, units: Sequence[str]) -> dict
 def make_lm_score_fn(lm, *, chunk: int = 0, device=None):
     """构造 BeamClean 用的 LM 打分函数 ``prefix_ids [N, t] -> [N]``。
 
-    打分口径（任务单 M8b 第 6 步）：把前缀整段喂给 LM（``input_ids=prefix``、
-    ``attention_mask=ones``），对每个位置取**该位置真实 token** 的 log-prob，
-    再沿位置求和。即 ``Σ_t log p(token_t | token_<t)`` 的“同位置 gather”写法
-    （未做 shift：第 t 个位置的 logits 与第 t 个 token 对齐）。这一点对 BeamClean
-    的候选排序有影响，属实现约定，见交付报告“存疑项”。
+    打分口径是**标准自回归对数似然**（已按主控裁决修正，不再是同位置 gather）::
+
+        score(tokens[:, :t]) = Σ_{i=2..t} log p(tokens[:, i] | tokens[:, :i])
+
+    实现：整段前缀喂给 LM（``input_ids=prefix``、``attention_mask=ones``），用
+    ``logits[:, :-1]``（位置 ``i-1`` 的预测）对 ``tokens[:, 1:]``（待预测的 ``i``
+    号 token）做 ``log_softmax`` + ``gather``，再沿位置求和；``t == 1`` 时没有可
+    条件化的 next-token，直接返回 0（``t == 0`` 同理）。旧实现用同位置 gather
+    （``logits[:, t]`` 对 ``tokens[:, t]``），分数里包含“看到自己”的项，语义错误。
+
+    前缀不含 padding（BeamClean 每步传入的前缀长度就是有效 token 数），所以
+    ``attention_mask`` 全 1；求和前仍显式乘 mask，保证 padding 位置不计分。
 
     Args:
         lm: ``AutoModelForCausalLM`` 或任何返回 ``.logits [N, t, V]`` 的模块。
@@ -204,20 +244,26 @@ def make_lm_score_fn(lm, *, chunk: int = 0, device=None):
         n_rows, seq_len = int(ids.shape[0]), int(ids.shape[1])
         if n_rows == 0:
             return torch.zeros(0, dtype=torch.float64)
-        if seq_len == 0:
+        if seq_len <= 1:
+            # t == 0 / t == 1：没有可条件化的 next-token，按约定返回 0。
             return torch.zeros(n_rows, dtype=torch.float64)
         step = chunk if chunk > 0 else _auto_lm_chunk(seq_len, vocab)
         scores = torch.empty(n_rows, dtype=torch.float64)
         for start in range(0, n_rows, step):
             block = ids[start : start + step].to(model_device)
-            mask = torch.ones_like(block)
+            mask = torch.ones_like(block)  # 前缀全是有效 token，无 padding
             logits = lm(input_ids=block, attention_mask=mask).logits
+            # 标准自回归：位置 i-1 的 logits 预测的才是 token i（i = 2..t），
+            # 因此 logits 去掉最后一个位置、target 去掉第一个位置。
+            step_logits = logits[:, :-1, :]
+            targets = block[:, 1:]
+            step_mask = mask[:, 1:].to(torch.float32)
             # float32 上做 log_softmax：bf16/fp16 的直接 log_softmax 精度不足。
-            log_probs = torch.log_softmax(logits.to(torch.float32), dim=-1)
-            token_log_probs = log_probs.gather(-1, block.unsqueeze(-1)).squeeze(-1)
-            scores[start : start + step] = (
-                token_log_probs.sum(dim=1).to(torch.float64).cpu()
-            )
+            log_probs = torch.log_softmax(step_logits.to(torch.float32), dim=-1)
+            token_log_probs = log_probs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
+            # 显式 mask 掉 padding（前缀无 padding 时 mask 全 1，结果不变）。
+            masked = token_log_probs.to(torch.float64) * step_mask.to(torch.float64)
+            scores[start : start + step] = masked.sum(dim=1).cpu()
         return scores
 
     return lm_score_fn
@@ -374,13 +420,23 @@ def _collect_examples(examples: Sequence[Mapping[str, Any]]) -> tuple[list[dict]
 
 
 def _aggregate(entries: Sequence[Mapping[str, Any]], *, sigma_hats=None) -> dict:
-    """按 token 汇总 FR、按样本汇总 PII-Ratio；无定义值时返回 ``None``。"""
+    """按 token 汇总 FR、按样本汇总 PII-Ratio；无定义值时返回 ``None``。
+
+    主口径 ``pii_ratio_mean`` 用 ``T_ref``（模型实际看到的截断文本）做分母；
+    ``pii_ratio_full_mean`` 是旧的整文口径，只用于审计对照。
+    """
     n_tokens = sum(int(entry["n_tokens"]) for entry in entries)
     n_errors = sum(int(entry["n_errors"]) for entry in entries)
     ratios = [
         float(entry["pii_ratio"])
         for entry in entries
         if entry.get("pii_ratio_defined") and entry.get("pii_ratio") is not None
+    ]
+    ratios_full = [
+        float(entry["pii_ratio_full"])
+        for entry in entries
+        if entry.get("pii_ratio_full_defined")
+        and entry.get("pii_ratio_full") is not None
     ]
     recovered = [
         float(entry["recovered_frac"])
@@ -390,11 +446,15 @@ def _aggregate(entries: Sequence[Mapping[str, Any]], *, sigma_hats=None) -> dict
     summary = {
         "fr": (100.0 * n_errors / n_tokens) if n_tokens else None,
         "pii_ratio_mean": (sum(ratios) / len(ratios)) if ratios else None,
+        "pii_ratio_full_mean": (
+            (sum(ratios_full) / len(ratios_full)) if ratios_full else None
+        ),
         "n_samples": len(entries),
         "n_tokens": n_tokens,
         "n_errors": n_errors,
         "n_pii_ratio_defined": len(ratios),
         "n_pii_ratio_undefined": len(entries) - len(ratios),
+        "n_pii_ratio_full_defined": len(ratios_full),
         "pii_units_recovered_mean": (sum(recovered) / len(recovered)) if recovered else None,
         "n_samples_with_pii_units": len(recovered),
     }
@@ -438,7 +498,8 @@ def run_pupa_eval(
         lm: 因果 LM，仅 BeamClean 需要；``skip_beamclean=False`` 且未提供时**直接报错**。
         sgt: 已载入的 :class:`sgt.model.SGTModel`；``None`` 表示无保护基线（``x̃ = x``）。
         sgt_meta: 写进 ``meta.sgt`` 的附加信息（checkpoint 路径/结构等）。
-        max_len: tokenize 的最大长度（右截断）。
+        max_len: tokenize 的最大长度（右截断）；PII-Ratio 的分母参考文本是截断后的
+            有效 token 解码文本 ``T_ref``，不是完整 ``user_query``。
         batch_size: 批大小（批内右 padding）。
         seed: SGT 采样 ``torch.Generator`` 的种子（固定 → 结果可复现）。
         skip_beamclean: 显式跳过 BeamClean；结果里记 ``status="skipped"``。
@@ -449,7 +510,9 @@ def run_pupa_eval(
 
     Returns:
         ``{"nn": {...}, "beamclean": {...}, "rows": [...], "meta": {...}}``；
-        所有浮点已清洗为有限值或 ``None``（不会有 NaN/Inf）。
+        所有浮点已清洗为有限值或 ``None``（不会有 NaN/Inf）。逐样本 ``rows`` 含完整
+        ``user_query``、``pii_reference_text``（= ``T_ref``），以及 NN / BeamClean 各自的
+        ``pii_ratio``（分母 ``T_ref``）与 ``pii_ratio_full``（分母完整原文，审计对照）。
     """
     started = time.time()
     table = torch.as_tensor(table)
@@ -547,6 +610,9 @@ def run_pupa_eval(
             nn_ids = pred_nn[row_index][valid].to(torch.long)
             nn_errors = int((nn_ids != target_ids).sum())
             nn_text = _decode(tokenizer, nn_ids)
+            # PII-Ratio 的参考文本 T_ref：模型实际看到的有效 token 的解码文本
+            # （max_len 截断后），不是完整 user_query；完整原文另记 pii_ratio_full。
+            reference_text = _decode(tokenizer, target_ids)
 
             row = {
                 "index": int(record["index"]),
@@ -554,13 +620,19 @@ def run_pupa_eval(
                 "predicted_category": record["predicted_category"],
                 "n_tokens": n_tokens,
                 TEXT_FIELD: record["text"],
+                "pii_reference_text": reference_text,
                 "pii_units": list(record["units"]),
                 "nn": {
                     "n_tokens": n_tokens,
                     "n_errors": nn_errors,
                     "fr": metrics.failure_rate(nn_ids, target_ids),
                     "reconstructed": nn_text,
-                    **_pii_fields(record["text"], nn_text, record["units"]),
+                    **_pii_fields(
+                        reference_text,
+                        nn_text,
+                        record["units"],
+                        full_text=record["text"],
+                    ),
                 },
                 "beamclean": {"status": "skipped"},
             }
@@ -586,7 +658,12 @@ def run_pupa_eval(
                     "fr": metrics.failure_rate(bc_ids, target_ids),
                     "sigma_hat": float(sigma_hat),
                     "reconstructed": bc_text,
-                    **_pii_fields(record["text"], bc_text, record["units"]),
+                    **_pii_fields(
+                        reference_text,
+                        bc_text,
+                        record["units"],
+                        full_text=record["text"],
+                    ),
                 }
 
             rows.append(row)
@@ -618,6 +695,7 @@ def run_pupa_eval(
             "status": "skipped",
             "fr": None,
             "pii_ratio_mean": None,
+            "pii_ratio_full_mean": None,
             "scripts": [],
             "sigma_hat_mean": None,
             "n_samples": 0,
@@ -679,14 +757,16 @@ def run_pupa_eval(
             "跨样本按 token 汇总（逐样本 FR 的 token 加权平均）"
         ),
         "pii_definition": (
-            "PII-Ratio = (T* 中 PII 字符占比) / (T 中 PII 字符占比)；PII 用 PUPA 的 "
+            "PII-Ratio = (T* 中 PII 字符占比) / (T_ref 中 PII 字符占比)；PII 用 PUPA 的 "
             "pii_units 做大小写不敏感、最长优先、不重叠的字符匹配（非 PAPILLON "
             "LLM-as-judge，见 SPEC A10）"
         ),
-        "pii_reference": (
-            "T = 完整 user_query（不按 max_len 截断）；T* = 重建 ids 的解码文本"
-            "（只覆盖前 max_len 个 token）。max_len 截断时两者长度窗口不同，"
-            "见交付报告“存疑项”"
+        "pii_reference": "truncated_decoded",
+        "pii_reference_definition": (
+            "T_ref = tokenizer.decode(截断到 max_len 后的有效 token ids, "
+            "skip_special_tokens=True)，即模型实际看到的文本；"
+            "T* = 重建 ids 的解码文本。逐样本另记 pii_reference_text（T_ref 全文）与 "
+            "pii_ratio_full（分母为完整 user_query 的旧口径，仅审计对照，不参与主指标）"
         ),
         "duration_seconds": float(time.time() - started),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -704,6 +784,8 @@ def _only_pii(entry: Mapping[str, Any]) -> dict:
         "pii_rec",
         "pii_ratio",
         "pii_ratio_defined",
+        "pii_ratio_full",
+        "pii_ratio_full_defined",
         "n_units",
         "n_recovered",
         "recovered_frac",
@@ -907,8 +989,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "meta": {
             **result["meta"],
             "pupa_config": args.pupa_config,
-            # M5 的 load_pupa(...).meta 原样记录（其 text_field=target_response 是
-            # build_prompt 的口径，本评测不使用；本评测的文本字段见 meta.text_field）。
+            # M5 的 load_pupa(...).meta 原样记录（数据来源/条数/抓取时间等）；
+            # 本评测直接读 user_query，不依赖 M5 的 PUPA_TEXT_FIELD / build_prompt。
             "pupa_dataset_meta": getattr(examples, "meta", {}),
             "dtype": args.dtype,
             "tag": tag,

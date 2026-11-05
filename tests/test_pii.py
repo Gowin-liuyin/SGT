@@ -11,9 +11,14 @@
 
 另加（同一模块的契约检查，不依赖大模型）：
 
-6. ``make_lm_score_fn`` 的“同位置真实 token log-prob 之和”口径（用随机初始化微型 Llama）；
+6. ``make_lm_score_fn`` 的**标准自回归**口径
+   ``Σ_{i=2..t} log p(tokens[:, i] | tokens[:, :i])``（用随机初始化微型 Llama 与
+   确定性 logits stub 各验一次，前者跑真实 HF 模型、后者与手算逐位一致）；
 7. ``load_sgt_from_checkpoint`` 往返与结构反推；
-8. ``run_pupa_eval`` 拒绝“未给 lm 却静默跳过 BeamClean”，且只用 ``user_query``。
+8. ``run_pupa_eval`` 拒绝“未给 lm 却静默跳过 BeamClean”，且只用 ``user_query``；
+9. PII-Ratio 的分母 ``T_ref`` 是 max_len 截断后的解码文本（不是完整 ``user_query``）：
+   无保护基线且 ``t̃ = t`` 时 ``nn.fr == 0`` 且 ``nn.pii_ratio == 1.0``，同时保留
+   完整原文与 ``pii_ratio_full``（旧整文口径）供审计。
 """
 
 from __future__ import annotations
@@ -310,12 +315,17 @@ def test_05_run_pupa_eval_nn_only_small_sample(small_table, char_tokenizer):
     for row, example in zip(payload["rows"], _PUPA_STYLE_EXAMPLES):
         assert row["user_query"] == example["user_query"]
         assert row["conversation_hash"] == example["conversation_hash"]
+        # 未截断（max_len=64 > 所有样本长度）时 T_ref 与完整原文一致
+        assert row["pii_reference_text"] == example["user_query"]
+        assert payload["meta"]["pii_reference"] == "truncated_decoded"
 
     # 第 3 条样例的 PII 只在 target_response 里 → user_query 口径下 PII-Ratio 未定义
     third = payload["rows"][2]["nn"]
     assert third["pii_orig"] == 0.0
     assert third["pii_ratio"] is None
     assert third["pii_ratio_defined"] is False
+    assert third["pii_ratio_full"] is None
+    assert third["pii_ratio_full_defined"] is False
 
     # 有 PII 的样本：重建文本 == 原文（FR=0）→ PII-Ratio 精确为 1.0、片段全恢复
     defined = [
@@ -327,7 +337,12 @@ def test_05_run_pupa_eval_nn_only_small_sample(small_table, char_tokenizer):
     assert defined == [1.0, 1.0, 1.0]
     assert payload["nn"]["pii_ratio_mean"] == 1.0
     assert payload["nn"]["pii_units_recovered_mean"] == 1.0
+    # 未截断时整文口径（pii_ratio_full）与主口径相同
+    assert payload["nn"]["pii_ratio_full_mean"] == 1.0
+    assert payload["nn"]["n_pii_ratio_full_defined"] == 3
     for row in payload["rows"]:
+        assert row["nn"]["pii_ratio_full"] == row["nn"]["pii_ratio"]
+        assert row["nn"]["pii_ratio_full_defined"] == row["nn"]["pii_ratio_defined"]
         if row["nn"]["n_units"] > 0:
             assert row["nn"]["n_recovered"] == row["nn"]["n_units"]
             assert row["nn"]["recovered_frac"] == 1.0
@@ -340,6 +355,7 @@ def test_05_run_pupa_eval_nn_only_small_sample(small_table, char_tokenizer):
 
 
 def test_06_lm_score_fn_matches_manual_forward():
+    """真实 HF 模型上的 shift 校验：``logits[:, i-1]`` 预测 ``tokens[:, i]``。"""
     torch.manual_seed(0)
     config = LlamaConfig(
         vocab_size=64,
@@ -361,12 +377,170 @@ def test_06_lm_score_fn_matches_manual_forward():
 
     with torch.no_grad():
         logits = lm(input_ids=ids, attention_mask=torch.ones_like(ids)).logits
-        log_probs = torch.log_softmax(logits.to(torch.float32), dim=-1)
-        manual = log_probs.gather(-1, ids.unsqueeze(-1)).squeeze(-1).sum(dim=1)
-    torch.testing.assert_close(scores, manual.to(torch.float64), atol=1e-4, rtol=1e-5)
+        log_probs = torch.log_softmax(logits[:, :-1, :].to(torch.float32), dim=-1)
+        manual = (
+            log_probs.gather(-1, ids[:, 1:].unsqueeze(-1))
+            .squeeze(-1)
+            .to(torch.float64)
+            .sum(dim=1)
+        )
+    torch.testing.assert_close(scores, manual, atol=1e-4, rtol=1e-5)
 
     # 空输入不炸
     assert score_fn(torch.zeros((0, 4), dtype=torch.long)).shape == (0,)
+
+
+class _StubLogits:
+    def __init__(self, logits: torch.Tensor) -> None:
+        self.logits = logits
+
+
+class _FixedLogitsLM(torch.nn.Module):
+    """确定性 LM stub：logits 只由位置决定（与输入 token 无关），便于逐位手算。
+
+    ``forward(input_ids[N, t])`` 返回 ``.logits [N, t, V]``，每行都等于
+    ``fixed_logits[:t]``；``make_lm_score_fn`` 只需要 ``parameters()`` /
+    ``get_input_embeddings()`` / ``forward().logits``。
+    """
+
+    def __init__(self, vocab: int, max_len: int, *, seed: int = 7) -> None:
+        super().__init__()
+        generator = torch.Generator().manual_seed(int(seed))
+        fixed = torch.randn(max_len, vocab, generator=generator)
+        self.register_buffer("fixed_logits", fixed)
+        self.embedding = torch.nn.Embedding(vocab, 4)
+
+    def get_input_embeddings(self) -> torch.nn.Embedding:
+        return self.embedding
+
+    def forward(self, input_ids, attention_mask=None, **kwargs):
+        n_rows, seq_len = input_ids.shape
+        logits = self.fixed_logits[:seq_len].unsqueeze(0).expand(
+            n_rows, seq_len, self.fixed_logits.shape[1]
+        )
+        return _StubLogits(logits)
+
+
+def test_lm_score_fn_shifted():
+    """实现与手算 ``Σ_{i=2..t} log_softmax(logits[:, i-1])[tokens[:, i]]`` 一致。"""
+    vocab, seq_len = 7, 5
+    lm = _FixedLogitsLM(vocab, max_len=16, seed=11)
+    score_fn = run_pupa.make_lm_score_fn(lm, chunk=0)
+
+    ids = torch.randint(
+        0, vocab, (4, seq_len), generator=torch.Generator().manual_seed(3)
+    )
+    scores = score_fn(ids)
+    assert scores.shape == (4,)
+    assert scores.dtype == torch.float64
+    assert torch.isfinite(scores).all()
+
+    with torch.no_grad():
+        logits = lm(input_ids=ids, attention_mask=torch.ones_like(ids)).logits
+        step_log_probs = torch.log_softmax(logits[:, :-1, :].to(torch.float32), dim=-1)
+        manual = (
+            step_log_probs.gather(-1, ids[:, 1:].unsqueeze(-1))
+            .squeeze(-1)
+            .to(torch.float64)
+            .sum(dim=1)
+        )
+        # 旧口径（同位置 gather，包含“看到自己”的项）用于确认 shift 真的生效
+        naive = (
+            torch.log_softmax(logits.to(torch.float32), dim=-1)
+            .gather(-1, ids.unsqueeze(-1))
+            .squeeze(-1)
+            .to(torch.float64)
+            .sum(dim=1)
+        )
+
+    # 手算与实现用同一批 logits：float64 求和，逐位一致（容差 1e-9 远大于实际误差 0）
+    torch.testing.assert_close(scores, manual, atol=1e-9, rtol=0.0)
+    assert not torch.allclose(scores, naive, atol=1e-6), "分数仍是同位置 gather（未 shift）"
+
+
+def test_lm_score_fn_single_token_is_zero():
+    """``t == 1`` 时没有可条件化的 next-token，返回 0。"""
+    lm = _FixedLogitsLM(vocab=5, max_len=8, seed=2)
+    score_fn = run_pupa.make_lm_score_fn(lm)
+
+    single = torch.tensor([[1], [4], [0]], dtype=torch.long)
+    scores = score_fn(single)
+    assert scores.shape == (3,)
+    assert scores.dtype == torch.float64
+    assert torch.equal(scores, torch.zeros(3, dtype=torch.float64))
+
+    # t=0（空前缀）与空批次同样返回 0 / 空张量
+    assert torch.equal(
+        score_fn(torch.zeros((2, 0), dtype=torch.long)),
+        torch.zeros(2, dtype=torch.float64),
+    )
+    assert score_fn(torch.zeros((0, 3), dtype=torch.long)).shape == (0,)
+
+
+def test_pii_ratio_uses_truncated_reference(small_table, char_tokenizer):
+    """PII-Ratio 分母 = 模型实际看到的截断解码文本 ``T_ref``，不是完整 ``user_query``。
+
+    用 ``h1``（含 "John Smith" / "Paris"）：``max_len=22`` → 有效 ids 解码出
+    ``"My name is John Smith"``（截断）。无保护基线（``x̃ = x``）下 NN 逐 token
+    精确复原 → ``fr == 0``、重建文本 == ``T_ref``，因此主口径 PII-Ratio 必须正好
+    是 1.0；旧口径（分母为完整 42 字符原文）应约为 4/3，说明两个字段都在。
+    """
+    example = _PUPA_STYLE_EXAMPLES[0]
+    full_text = example["user_query"]
+    assert len(full_text) == 42
+    max_len = 22  # eos + 21 字符 = "My name is John Smith"
+    reference_text = full_text[: max_len - 1]
+    assert reference_text == "My name is John Smith"
+    units = pii.split_pii_units(example["pii_units"])
+    assert "John Smith" in units
+
+    payload = run_pupa.run_pupa_eval(
+        [example],
+        tokenizer=char_tokenizer,
+        table=small_table,
+        lm=None,
+        skip_beamclean=True,
+        max_len=max_len,
+        batch_size=1,
+        seed=0,
+        progress=False,
+    )
+    assert payload["meta"]["pii_reference"] == "truncated_decoded"
+
+    row = payload["rows"][0]
+    nn = row["nn"]
+    assert row["n_tokens"] == max_len
+    assert row["user_query"] == full_text  # 完整原文仍保留在输出里
+    assert row["pii_reference_text"] == reference_text
+
+    # 无保护基线逐 token 精确复原
+    assert nn["fr"] == 0.0
+    assert nn["n_errors"] == 0
+    assert nn["reconstructed"] == reference_text
+
+    # 主口径：分母 T_ref == 重建文本 → 恒等文本，PII-Ratio 精确 = 1.0
+    assert nn["pii_ratio_defined"] is True
+    assert nn["pii_ratio"] == pytest.approx(1.0, abs=1e-6)
+    assert nn["pii_orig"] == pytest.approx(10 / 21)  # "John Smith" / 21 字符
+    assert payload["nn"]["pii_ratio_mean"] == pytest.approx(1.0, abs=1e-6)
+
+    # 旧口径（分母完整原文）仍然记录，且与 sgt.pii 的整文比值一致
+    expected_full = pii.pii_ratio(full_text, reference_text, units)
+    assert expected_full["defined"] is True
+    assert nn["pii_ratio_full_defined"] is True
+    assert nn["pii_ratio_full"] == pytest.approx(expected_full["ratio"], abs=1e-12)
+    assert nn["pii_ratio_full"] == pytest.approx(4 / 3)
+    assert nn["pii_ratio_full"] != pytest.approx(1.0, abs=1e-3)
+    assert payload["nn"]["pii_ratio_full_mean"] == pytest.approx(
+        expected_full["ratio"], abs=1e-12
+    )
+    assert payload["nn"]["n_pii_ratio_full_defined"] == 1
+    assert payload["nn"]["scripts"][0]["pii_ratio_full"] == pytest.approx(
+        expected_full["ratio"], abs=1e-12
+    )
+
+    # 输出仍可 JSON 序列化且无 NaN/Inf
+    json.loads(json.dumps(payload, ensure_ascii=False, allow_nan=False))
 
 
 def test_07_sgt_checkpoint_roundtrip(tmp_path):

@@ -19,6 +19,14 @@
 实际加载用 ``max_examples`` 截断，``max_examples=None`` 时采用与
 ``configs/data.yaml`` 一致的降规模默认（OpenOrca 4000 / Alpaca 1000），
 不是论文全量。
+
+OpenOrca 总量口径：datasets-server 的 ``num_rows_total`` 是**部分索引**
+（响应 ``partial: true``，2,942,029），不是真实总量。真实总量取 Hugging Face
+仓库两个 parquet 文件的 footer 行数之和（只读元数据、不下载数据页）：
+``1M-GPT4-Augmented.parquet`` 994,896 + ``3_5M-GPT3_5-Augmented.parquet``
+3,239,027 = **4,233,923**（论文 15% 的分母）。结果缓存到
+``data_cache/openorca/dataset_size.json``，之后离线也能读；取不到 footer 时
+才回退 datasets-server 的 ``num_rows_total``，并用 ``n_total_source`` 标注来源。
 """
 
 from __future__ import annotations
@@ -63,6 +71,16 @@ OPENORCA_SPLIT = "train"
 OPENORCA_FIELDS = ("id", "system_prompt", "question", "response")
 DEFAULT_OPENORCA_MAX_EXAMPLES = 4000
 DEFAULT_FRAC = 0.15
+# 真实总量的来源：仓库里的两个 parquet 文件（footer 行数之和 = 4,233,923）。
+# datasets-server 的 num_rows_total（2,942,029）只是部分索引，不能当分母。
+OPENORCA_PARQUET_FILES = (
+    "1M-GPT4-Augmented.parquet",
+    "3_5M-GPT3_5-Augmented.parquet",
+)
+OPENORCA_PARQUET_URL = "https://huggingface.co/datasets/{repo}/resolve/main/{name}"
+# parquet footer 只读的 fsspec 块大小；footer 通常 < 1 MB，块大小只影响 range 粒度。
+PARQUET_BLOCK_SIZE = 1 << 20
+DATASET_SIZE_FILE = "dataset_size.json"
 
 ALPACA_DATASET = "tatsu-lab/alpaca"
 ALPACA_CONFIG = "default"
@@ -350,6 +368,7 @@ def _build_meta(
     pages: Sequence[int],
     cache_path: Path,
     extra_meta: dict | None,
+    source: str = "datasets-server.huggingface.co/rows",
 ) -> dict:
     meta = {
         "dataset": dataset,
@@ -360,7 +379,7 @@ def _build_meta(
         "requested": int(requested),
         "pages": list(pages),
         "fetched_at": _now_iso(),
-        "source": "datasets-server.huggingface.co/rows",
+        "source": source,
         "cache_file": str(cache_path),
     }
     if extra_meta:
@@ -373,57 +392,248 @@ def _build_meta(
 # --------------------------------------------------------------------------- #
 
 
+def _parquet_num_rows(url: str) -> int:
+    """只读 parquet footer 拿 ``num_rows``（range 读元数据，不下载数据页）。"""
+    import fsspec
+    from pyarrow.parquet import ParquetFile
+
+    with fsspec.open(url, "rb", block_size=PARQUET_BLOCK_SIZE, cache_type="none") as f:
+        return int(ParquetFile(f).metadata.num_rows)
+
+
+def _openorca_dataset_size(*, force_refresh: bool = False) -> dict:
+    """OpenOrca 真实总量：两个 parquet 文件的 footer 行数之和。
+
+    结果写入 ``data_cache/openorca/dataset_size.json``（含逐文件行数、读取时间、
+    来源）。缓存命中即直接返回，**不重读 parquet**，因此无网络时也能用。
+    读不到 footer 时抛异常，由调用方回退到 datasets-server 的 ``num_rows_total``。
+    """
+    path = DEFAULT_CACHE_DIR / "openorca" / DATASET_SIZE_FILE
+    if not force_refresh:
+        cached = _read_json(path)
+        if cached and int(cached.get("n_total") or 0) > 0:
+            return cached
+
+    files = {
+        name: _parquet_num_rows(
+            OPENORCA_PARQUET_URL.format(repo=OPENORCA_DATASET, name=name)
+        )
+        for name in OPENORCA_PARQUET_FILES
+    }
+    payload = {
+        "dataset": OPENORCA_DATASET,
+        "source": "parquet_footer",
+        "n_total": int(sum(files.values())),
+        "files": files,
+        "read_at": _now_iso(),
+        "file_urls": {
+            name: OPENORCA_PARQUET_URL.format(repo=OPENORCA_DATASET, name=name)
+            for name in OPENORCA_PARQUET_FILES
+        },
+    }
+    _write_json(path, payload)
+    return payload
+
+
 def openorca_counts(frac: float = DEFAULT_FRAC) -> dict:
     """论文协议计数：OpenOrca 总量、15% 选中条数、当前缓存条数。
+
+    分母 ``n_total`` 优先取两个 parquet footer 的真实总量（4,233,923），
+    并用 ``n_total_source="parquet_footer"`` 标注；该结果缓存在
+    ``data_cache/openorca/dataset_size.json``，命中缓存时不重读 parquet
+    （无网络亦可用）。footer 读不到时回退 datasets-server 的
+    ``num_rows_total``（部分索引 2,942,029），标注
+    ``n_total_source="server_partial"``。
 
     ``n_selected`` 仅按论文 §7（15% 的 OpenOrca）计算并记录；实际加载由
     :func:`load_openorca` 的 ``max_examples`` 截断（SPEC D2 降规模）。
     """
     if not 0.0 < float(frac) <= 1.0:
         raise ValueError(f"frac 必须在 (0, 1]，实际 {frac}")
-    page = _rows_page(OPENORCA_DATASET, OPENORCA_CONFIG, OPENORCA_SPLIT, 0, 1)
-    n_total = int(page["num_rows_total"])
+
+    n_total: int | None = None
+    source: str | None = None
+    try:
+        n_total = int(_openorca_dataset_size()["n_total"])
+        source = "parquet_footer"
+    except Exception:  # noqa: BLE001 - 网络/依赖不可用时回退 datasets-server
+        n_total = None
+
+    if n_total is None:
+        page = _rows_page(OPENORCA_DATASET, OPENORCA_CONFIG, OPENORCA_SPLIT, 0, 1)
+        n_total = int(page["num_rows_total"])
+        source = "server_partial"
+
     return {
         "n_total": n_total,
         "n_selected": math.ceil(float(frac) * n_total),
         "frac": float(frac),
         "n_fetched": _cached_jsonl_count(DEFAULT_CACHE_DIR / "openorca"),
+        "n_total_source": source,
     }
+
+
+def _validate_split(split: str) -> str:
+    """OpenOrca 只支持 ``train`` 分支（缓存文件名 ``train_first{N}.jsonl`` 同源）。"""
+    if not isinstance(split, str) or not split:
+        raise ValueError(f"split 必须是非空字符串，实际 {split!r}")
+    if split != OPENORCA_SPLIT:
+        raise ValueError(
+            f"不支持的 split {split!r}，当前仅支持 {OPENORCA_SPLIT!r}"
+        )
+    return split
+
+
+def _load_openorca_local(
+    *,
+    requested: int,
+    split: str,
+    cache_dir: Path,
+    force_refresh: bool,
+    extra_meta: dict | None,
+) -> ExampleList:
+    """``streaming=False`` 路径：走 ``datasets.load_dataset``（HF 原生加载）。
+
+    先查同一份缓存（``train_first{N}.jsonl``），命中则不触网；未命中时用
+    ``datasets.load_dataset`` 加载，再把前 ``requested`` 条按字段写成同样的
+    JSONL 缓存。注意：非流式 ``load_dataset`` 会下载仓库全部 parquet
+    （数 GB，本机带宽约 1 MB/s，耗时很长），因此默认用 ``streaming=True``
+    的 rows 分页路径；本分支只在调用方显式传 ``streaming=False`` 且缓存未命中时触发。
+    """
+    base = cache_dir / "openorca"
+    base.mkdir(parents=True, exist_ok=True)
+    meta_path = base / "meta.json"
+    cached_meta = _read_json(meta_path) or {}
+    n_cached_total = (
+        int(cached_meta["n_total"]) if cached_meta.get("n_total") else None
+    )
+
+    if not force_refresh and n_cached_total is not None:
+        n = min(requested, n_cached_total)
+        path = base / f"train_first{n}.jsonl"
+        records = _read_jsonl(path, n)
+        if records is not None:
+            meta = dict(cached_meta)
+            meta.update(extra_meta or {})
+            meta.update(
+                {
+                    "n_total": n_cached_total,
+                    "n_fetched": n,
+                    "requested": requested,
+                    "cache_file": str(path),
+                }
+            )
+            meta.setdefault("pages", [])
+            return ExampleList(records, meta=meta)
+
+    from datasets import load_dataset
+
+    dataset = load_dataset(OPENORCA_DATASET, OPENORCA_CONFIG, split=split)
+    n_total = len(dataset)
+    n = min(requested, n_total)
+    path = base / f"train_first{n}.jsonl"
+    if not force_refresh:
+        records = _read_jsonl(path, n)
+        if records is not None:
+            meta = _build_meta(
+                OPENORCA_DATASET,
+                OPENORCA_CONFIG,
+                split,
+                n_total,
+                n,
+                requested,
+                [],
+                path,
+                extra_meta,
+                source="datasets.load_dataset",
+            )
+            return ExampleList(records, meta=meta)
+
+    dataset = dataset.select(range(n))
+    records = [
+        {field: dataset[i][field] for field in OPENORCA_FIELDS} for i in range(n)
+    ]
+    _write_jsonl(path, records)
+    meta = _build_meta(
+        OPENORCA_DATASET,
+        OPENORCA_CONFIG,
+        split,
+        n_total,
+        len(records),
+        requested,
+        [],
+        path,
+        extra_meta,
+        source="datasets.load_dataset",
+    )
+    _write_json(meta_path, meta)
+    return ExampleList(records, meta=meta)
 
 
 def load_openorca(
     frac: float = DEFAULT_FRAC,
     *,
     max_examples: int | None = None,
+    split: str = OPENORCA_SPLIT,
+    streaming: bool = True,
+    seed: int = 0,
     cache_dir: str | Path | None = None,
     force_refresh: bool = False,
 ) -> ExampleList:
     """加载 OpenOrca 前 ``max_examples`` 条（原始顺序），并缓存。
 
-    - ``frac`` 只写入 :attr:`ExampleList.meta`（论文协议 15%），不影响选取条数。
+    - ``frac`` 只写入 :attr:`ExampleList.meta`（论文协议 15%），不决定选取条数，
+      也不改变取数顺序。
     - ``max_examples=None`` 时用降规模默认 ``DEFAULT_OPENORCA_MAX_EXAMPLES=4000``
       （与 ``configs/data.yaml`` 一致）；条数上限还受 ``num_rows_total`` 约束。
+    - ``split`` 必须为 ``"train"``（当前唯一支持的分支）。
+    - ``streaming=True``（默认）走 datasets-server 的 rows 分页接口；
+      ``streaming=False`` 走 ``datasets.load_dataset``（非流式会下载全部
+      parquet 数 GB，缓存未命中时耗时很长）。
+    - ``seed`` 是**顺序无关的占位参数**：数据顺序固定为文件/数据集原始顺序，
+      ``seed`` **不影响顺序**，不同 ``seed`` 取回的数据完全一致（仅为对齐训练
+      CLI 的调用签名而保留）。``seed`` 不参与缓存 fingerprint。
     - 返回 ``list[dict]``（``ExampleList``），字段 ``id/system_prompt/question/response``；
       ``.meta`` 含 n_total / n_fetched / pages / n_selected 等。
     """
     if not 0.0 < float(frac) <= 1.0:
         raise ValueError(f"frac 必须在 (0, 1]，实际 {frac}")
+    split = _validate_split(split)
+    if not isinstance(streaming, bool):
+        raise TypeError(f"streaming 必须是 bool，实际 {type(streaming).__name__}")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise TypeError(f"seed 必须是整数，实际 {type(seed).__name__}")
+    if seed < 0:
+        raise ValueError(f"seed 必须非负，实际 {seed}")
     requested = (
         DEFAULT_OPENORCA_MAX_EXAMPLES if max_examples is None else int(max_examples)
     )
     cache = _resolve_cache_dir(cache_dir)
-    examples = _load_rows_dataset(
-        dataset=OPENORCA_DATASET,
-        config=OPENORCA_CONFIG,
-        split=OPENORCA_SPLIT,
-        fields=OPENORCA_FIELDS,
-        requested=requested,
-        cache_dir=cache,
-        subdir="openorca",
-        force_refresh=force_refresh,
-        extra_meta={"frac": float(frac)},
-    )
+    extra_meta = {"frac": float(frac), "seed": int(seed), "seed_affects_order": False}
+    if streaming:
+        examples = _load_rows_dataset(
+            dataset=OPENORCA_DATASET,
+            config=OPENORCA_CONFIG,
+            split=split,
+            fields=OPENORCA_FIELDS,
+            requested=requested,
+            cache_dir=cache,
+            subdir="openorca",
+            force_refresh=force_refresh,
+            extra_meta=extra_meta,
+        )
+    else:
+        examples = _load_openorca_local(
+            requested=requested,
+            split=split,
+            cache_dir=cache,
+            force_refresh=force_refresh,
+            extra_meta=extra_meta,
+        )
     examples.meta["frac"] = float(frac)
+    examples.meta["seed"] = int(seed)
+    examples.meta["seed_affects_order"] = False
+    examples.meta["streaming"] = streaming
     examples.meta["n_selected"] = math.ceil(float(frac) * examples.meta["n_total"])
     return examples
 

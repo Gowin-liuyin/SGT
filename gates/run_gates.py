@@ -34,7 +34,8 @@ MODULES: list[tuple[str, str]] = [
     ("m5", "data"),
     ("m6", "train"),
     ("m7", "ablation"),
-    ("m8", "utility"),
+    ("m8a", "utility"),
+    ("m8b", "pii"),
     ("m9", "large"),
     ("m10", "report"),
 ]
@@ -50,7 +51,11 @@ def discover_modules(gates_dir: Path) -> list[tuple[str, str]]:
         m = re.match(r"gate_(m\d+)_(.+)\.py$", path.name)
         if m:
             found[m.group(1)] = m.group(2)
-    return sorted(found.items(), key=lambda kv: int(kv[0][1:]))
+    def _key(kv):
+        digits = "".join(ch for ch in kv[0][1:] if ch.isdigit())
+        suffix = "".join(ch for ch in kv[0][1:] if ch.isalpha())
+        return (int(digits), suffix)
+    return sorted(found.items(), key=_key)
 
 
 def run_one(module: str, name: str, gates_dir: Path, results_dir: Path) -> int:
