@@ -448,7 +448,8 @@ def test_utility_loss_identical_logits_equal_entropy():
     strict=True,
     reason=(
         "任务单第 6 条「同分布时 L_U=0」与 L_U=CE(p_clean,p_sgt) 矛盾："
-        "z_sgt=z_clean 时 L_U=H(p_clean)≠0，仅 one-hot 极限为 0"
+        "z_sgt=z_clean 时 L_U=H(p_clean)≠0（M2 门禁 c-utility-identity 已改为期望 H(p)），"
+        "仅 one-hot 极限为 0"
     ),
 )
 def test_utility_loss_identical_logits_zero_claim_is_false():
