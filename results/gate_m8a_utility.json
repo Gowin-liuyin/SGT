@@ -1,0 +1,70 @@
+{
+  "gate": "m8a",
+  "name": "utility",
+  "module_entry": "§7 p.9：8 benchmark 平均差 = Utility",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-embedding-tgt1",
+      "expected": "changed when T>1",
+      "actual": "max|diff|=3.477e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-embedding-t1-passthrough",
+      "expected": "T==1 原样",
+      "actual": "max|diff|=0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-embedding-determinism",
+      "expected": "same seed equal, diff seed differ",
+      "actual": "eq=True neq=True",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-install",
+      "expected": "logits finite [2,4,64]",
+      "actual": "shape=(2, 4, 64) finite=True",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility-scores",
+      "expected": "-0.666667 pp",
+      "actual": "-0.666667 pp",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-lm-eval-smoke",
+      "expected": "两份结果均含 arc_easy",
+      "actual": "base_keys=['arc_easy'] sgt_keys=['arc_easy']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility-real",
+      "expected": "utility_pp 为有限数",
+      "actual": "-50.0",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:53:43+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

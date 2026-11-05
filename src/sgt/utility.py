@@ -236,17 +236,41 @@ def _read_hidden_size(model_path: Path) -> int:
     return d
 
 
+#: checkpoint 里可能包裹 state_dict 的顶层键，按此顺序尝试解包。
+_WRAPPER_KEYS = ("state_dict", "sgt")
+
+
 def _read_state_dict(ckpt_path: Path) -> dict:
+    """读取 SGT state_dict，依次接受三种封装。
+
+    1. 裸 state_dict（顶层直接含 ``input_proj.weight``）；
+    2. ``{"state_dict": <state_dict>}``；
+    3. ``{"sgt": <state_dict>}``（``sgt.train.train_sgt`` 与
+       ``experiments/run_ablation.py`` 的训练器格式；``optimizer`` / ``step`` /
+       ``config`` 等额外键被忽略）。
+
+    其余结构一律 :class:`ValueError`，错误信息列出已尝试的封装形式。
+    """
     if not ckpt_path.is_file():
         raise FileNotFoundError(f"SGT checkpoint 不存在: {ckpt_path}")
     obj = torch.load(ckpt_path, map_location="cpu", weights_only=True)
-    # 训练脚本可能把 state_dict 包在 {"state_dict": ...} 里；两种都接受。
-    if isinstance(obj, dict) and isinstance(obj.get("state_dict"), dict):
-        obj = obj["state_dict"]
+    # 顺序：裸 state_dict 优先，其次 {"state_dict": ...}，最后 {"sgt": ...}。
+    if isinstance(obj, dict) and not isinstance(
+        obj.get("input_proj.weight"), torch.Tensor
+    ):
+        for key in _WRAPPER_KEYS:
+            inner = obj.get(key)
+            if isinstance(inner, dict):
+                obj = inner
+                break
     if not isinstance(obj, dict) or not obj:
         raise ValueError(f"{ckpt_path} 不是非空 state_dict，实际 {type(obj)!r}")
     if not isinstance(obj.get("input_proj.weight"), torch.Tensor):
-        raise ValueError(f"{ckpt_path} 缺少 input_proj.weight，不是 SGTModel state_dict")
+        tried = " / ".join(["裸 state_dict"] + [f"{{{k}: ...}}" for k in _WRAPPER_KEYS])
+        raise ValueError(
+            f"{ckpt_path} 缺少 input_proj.weight，不是 SGTModel state_dict；"
+            f"已尝试的封装：{tried}"
+        )
     return obj
 
 
@@ -271,6 +295,10 @@ def load_sgt_for_lm(
     sigma_init: float = 1.0,
 ) -> SGTModel:
     """读取目标模型 config.json 的 ``hidden_size``，加载 SGT checkpoint。
+
+    checkpoint 兼容三种封装：裸 state_dict、``{"state_dict": ...}``，以及
+    ``sgt.train.train_sgt`` / ``experiments/run_ablation.py`` 保存的
+    ``{"sgt": ...}`` 训练器格式（多余键被忽略，见 :func:`_read_state_dict`）。
 
     维度校验：checkpoint 的 ``input_proj.weight`` 第 1 维（d）必须等于目标模型的
     ``hidden_size``，否则抛 :class:`ValueError`（调用方据此显式失败，不得回退基线）。
