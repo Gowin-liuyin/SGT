@@ -138,6 +138,7 @@ def _load_batches(
         examples = load_openorca(
             frac=float(data_raw.get("frac", 0.15)),
             max_examples=data_raw.get("max_examples"),
+            seed=int(train_raw.get("seed", 0)),
             cache_dir=data_raw.get("cache_dir"),
         )
         batches = list(

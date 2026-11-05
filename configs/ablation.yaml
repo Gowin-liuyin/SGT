@@ -19,7 +19,8 @@ sgt:
 
 train:
   steps: 300
-  lr: 1e-4
+  # 注意：PyYAML 把 `1e-4` 解析成字符串，写成 `1.0e-4` 才是 float（数值相同）。
+  lr: 1.0e-4
   batch_size: 2
   max_len: 128
   seed: 0
