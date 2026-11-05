@@ -1,0 +1,44 @@
+# S1 攻击评测默认参数（`experiments/run_attack_suite.py`）
+#
+# 规模声明（重要）：
+# - 论文 §6/§7 在 Llama-3.2-1B-Instruct 上评估 Alpaca 全量（52002 条）与 PUPA，
+#   Table 1/3 的攻击指标是论文规模下的数值。
+# - 本机为 Apple M5 / 16GB / MPS（SPEC D2/D3），下列参数是**降规模**设置：
+#   只做机制/方向性验证，数值不可与论文表值直接比较（SPEC §9 判定规则）。
+# - 所有随机由 `seed` 驱动的显式 torch.Generator 控制；评测中不重置 generator。
+# - BeamClean 是非官方最小实现（D5）；PII 用 PUPA 的 `pii_units` 做确定性字符匹配，
+#   不是 PAPILLON 的 LLM-as-judge（A10）。
+
+model: .models/llama-3.2-1b-instruct
+
+dataset:
+  name: alpaca # alpaca | pupa
+  pupa_config: pupa_tnb # pupa_tnb（237 条）| pupa_new（664 条）
+  max_examples: 200 # 降规模：Alpaca 全量 52002 条（D3）
+  max_len: 96 # 每条序列右截断长度（SGT ckpt 训练长度为 256）
+  eval_tokens: 600 # 汇总的有效 token 上限（最后一条按需截断）
+
+# 混淆方式三选一（CLI 的互斥参数；这里只记录默认落点，不自动生效）：
+#   sgt_ckpt=results/ckpt_abscos.pt | constant_sigma=0.4 | no_obfuscation=true
+obfuscation:
+  sgt_ckpt: null
+  constant_sigma: null
+  no_obfuscation: false
+  sgt_n_heads: null # 默认从 checkpoint 的 config["sgt"]["n_heads"] 读取
+  sgt_batch: 8 # SGT 前向的序列数/批
+
+attacks:
+  # A7 特征级 MI（Eq (8)）的 MC 配对数；降规模（run_ablation 默认 20000）。
+  n_pairs: 2000
+  rank_chunk: 0 # 0 = 按词表大小自适应；距离/排序预算 8M 元素/块
+  beamclean_n: 10 # 论文规模：Alpaca/PUPA 全量；降规模取前 10 条
+  beamclean_max_len: 24 # BeamClean 逐序列截断（T×beam×topk 决定 LM 前向成本）
+  beam: 4 # 论文 BeamClean 未给超参；取最小可用配置
+  topk: 8
+  n_iter: 3 # BeamClean 的 σ EM 迭代数
+
+runtime:
+  device: mps # cpu | mps
+  seed: 0
+  tag: null # 默认取 --out 的文件名
+  out: results/attack_suite.json

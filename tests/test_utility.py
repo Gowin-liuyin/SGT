@@ -3,7 +3,9 @@
 覆盖任务单 1–5：
 
 1. ``SGTEmbedding``：T>1 输出 ≠ base，T==1 输出 == base；
-2. 同 seed 两次调用逐位一致，不同 seed 不同；
+2. 同 seed 的两个 wrapper 相同调用序列逐位一致（跨 wrapper 可复现），不同 seed 不同；
+   同一 wrapper 对同一输入两次调用**不同**（fresh noise，论文的 stochastic SGT）；
+   ``fresh_noise=False`` 保留旧的“每次重置”行为（仅消融对照）；
 3. ``install_sgt_embedding`` 后 ``get_input_embeddings()`` 是 wrapper，模型可前向、
    形状正确、无 NaN，且确实改变 logits（wrapper 真被 forward 调用）；
 4. ``utility_scores`` 的 diff_pp / 平均值手算一致，缺失任务进入 ``tasks_missing``
@@ -104,9 +106,9 @@ def test_01_sgt_embedding_only_transforms_multi_token_inputs() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 2. seed 确定性
+# 2. seed 确定性：跨 wrapper 可复现；同一 wrapper 每次新噪声
 # --------------------------------------------------------------------------- #
-def test_02_seed_is_deterministic_and_effective() -> None:
+def test_02_seed_is_deterministic_across_wrappers_and_effective() -> None:
     base = _base_embedding()
     sgt = _trained_like_sgt()
     embedding_a = SGTEmbedding(base, sgt, seed=7)
@@ -115,14 +117,58 @@ def test_02_seed_is_deterministic_and_effective() -> None:
     ids = _ids()
 
     with torch.no_grad():
-        first = embedding_a(ids)
-        second = embedding_a(ids)  # 同一 wrapper 的两次调用
-        same_seed = embedding_b(ids)  # 同 seed 的另一 wrapper
+        same_seed = embedding_b(ids)  # 同 seed 的另一 wrapper（各自第 1 次调用）
         other_seed = embedding_c(ids)
+        first = embedding_a(ids)
 
-    assert torch.equal(first, second), "同一 seed 两次调用不一致"
-    assert torch.equal(first, same_seed), "同 seed 的两个 wrapper 输出不一致"
+    assert torch.equal(first, same_seed), "同 seed 的两个 wrapper 首次调用不一致"
     assert not torch.equal(first, other_seed), "不同 seed 的输出相同"
+
+
+def test_02a_fresh_noise_makes_repeated_calls_differ() -> None:
+    """fresh_noise=True（默认）：同一 wrapper 对同一输入的两次调用必须不同。"""
+    embedding = SGTEmbedding(_base_embedding(), _trained_like_sgt(), seed=0)
+    ids = _ids()
+
+    with torch.no_grad():
+        first = embedding(ids)
+        second = embedding(ids)
+        third = embedding(ids)
+
+    assert not torch.equal(first, second), "同一输入两次调用输出相同：噪声生成器被重置"
+    assert not torch.equal(second, third), "同一输入连续调用复用噪声"
+
+
+def test_02b_same_seed_wrappers_follow_identical_call_sequences() -> None:
+    """两个同 seed 的 wrapper 走相同调用序列时输出逐位一致（可复现）。"""
+    base = _base_embedding()
+    sgt = _trained_like_sgt()
+    wrapper_a = SGTEmbedding(copy.deepcopy(base), sgt, seed=11)
+    wrapper_b = SGTEmbedding(copy.deepcopy(base), sgt, seed=11)
+    second_ids = _ids(batch=1, seq_len=T)
+
+    with torch.no_grad():
+        for step, current in enumerate((_ids(), second_ids, _ids())):
+            out_a = wrapper_a(current)
+            out_b = wrapper_b(current)
+            assert torch.equal(out_a, out_b), f"第 {step} 次调用的输出不一致"
+
+
+def test_02c_fresh_noise_false_keeps_legacy_reset() -> None:
+    """fresh_noise=False 保留旧行为（每次重置到 seed），仅作消融对照。"""
+    base = _base_embedding()
+    sgt = _trained_like_sgt()
+    legacy = SGTEmbedding(base, sgt, seed=5, fresh_noise=False)
+    ids = _ids()
+
+    with torch.no_grad():
+        first = legacy(ids)
+        second = legacy(ids)
+        # 新 wrapper 的首次调用 = 旧 wrapper 的任一次调用（都从同一 seed 开始）
+        reference = SGTEmbedding(copy.deepcopy(base), sgt, seed=5, fresh_noise=False)(ids)
+
+    assert torch.equal(first, second), "fresh_noise=False 时同一输入两次调用应相同"
+    assert torch.equal(first, reference), "fresh_noise=False 时同 seed 首次调用应一致"
 
 
 # --------------------------------------------------------------------------- #

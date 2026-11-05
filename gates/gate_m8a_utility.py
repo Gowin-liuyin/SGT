@@ -55,12 +55,17 @@ def main() -> int:
             actual=f"max|diff|={float((single - base(ids[:, :1])).abs().max()):.3e}",
             passed=torch.equal(single, base(ids[:, :1])))
 
-    a = wrap(ids)
+    # fresh_noise=True（默认）：同实例连续两次调用必须不同（stochastic，SPEC P1）
+    two = wrap(ids)
+    same_instance_differs = not torch.equal(out_wrap, two)
+    # 两个同 seed 的新实例，首次调用逐位一致（可复现）
+    a = SGTEmbedding(base, sgt, seed=0)(ids)
     b = SGTEmbedding(base, sgt, seed=0)(ids)
     c = SGTEmbedding(base, sgt, seed=1)(ids)
-    g.check("c-embedding-determinism", expected="same seed equal, diff seed differ",
-            actual=f"eq={torch.equal(a, b)} neq={not torch.equal(a, c)}",
-            passed=torch.equal(a, b) and not torch.equal(a, c))
+    g.check("c-embedding-determinism",
+            expected="同实例两次不同；同 seed 新实例一致；异 seed 不同",
+            actual=f"fresh={same_instance_differs} eq={torch.equal(a, b)} neq={not torch.equal(a, c)}",
+            passed=same_instance_differs and torch.equal(a, b) and not torch.equal(a, c))
 
     # install 到小 LM
     from transformers import LlamaConfig, LlamaForCausalLM

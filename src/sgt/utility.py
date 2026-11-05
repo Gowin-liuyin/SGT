@@ -13,9 +13,13 @@
   embedding 来自服务端 embedding 表，按论文语义**不施加** SGT，直接返回
   ``base(ids)``。
 
-确定性：``SGTEmbedding`` 在每次前向开始时用构造时的 ``seed`` 重置噪声生成器，
-因此相同输入的输出逐位可复现（便于门禁/复跑）；这不会改变采样分布，只是固定
-了每次前向所抽的 ``u``。
+随机性（论文的 stochastic SGT 语义）：SGT 是随机变换，**同一输入两次采样必须不同**，
+且不同输入之间的噪声必须独立。``SGTEmbedding(fresh_noise=True)``（默认）在首次前向时
+按输入 device 创建 ``torch.Generator`` 并用构造时的 ``seed`` 播种，之后每次前向都
+**不重置**、持续推进该生成器：同种子的两个 wrapper 走相同调用序列仍可复现，但同一
+wrapper 对同一输入的连续两次调用会得到不同噪声。``fresh_noise=False`` 保留旧行为
+（每次前向重置到同一 seed），仅供消融对照——它让同形状的所有输入共享同一噪声场 ``u``，
+违反论文的 stochastic 定义，也破坏安全模型（噪声复用使不同输入的噪声相关）。
 """
 
 from __future__ import annotations
@@ -52,11 +56,22 @@ class SGTEmbedding(nn.Module):
     当 ``T == 1``（自回归逐 token 解码时）直接返回 ``base(ids)``，不施加 SGT
     （论文语义：客户端只变换 prompt，后续 token 由服务端 embedding 表查表）。
 
+    噪声生成器（论文的 stochastic SGT 语义）：
+
+    - ``fresh_noise=True``（默认）：首次前向时按输入 device 创建 ``torch.Generator``
+      并用 ``seed`` 播种，之后每次前向**不重置**——同一输入两次调用得到不同采样，
+      不同输入共享同一条独立随机流（不相关）；同 ``seed`` 的两个 wrapper 走相同调用
+      序列时逐位一致。
+    - ``fresh_noise=False``：每次前向把生成器重置到 ``seed`` 再采样（旧行为）。
+      这固定了每次前向所抽的 ``u``，使同形状的所有输入共享同一噪声场，**不满足**
+      论文的 stochastic 定义，且会让不同输入的噪声相关；只用于消融对照。
+
     Args:
         base_embedding: 原始输入 embedding（``nn.Embedding`` 或同接口模块）。
         sgt: µθ / Σθ 估计器（:class:`sgt.model.SGTModel`）。
-        seed: 每次前向重置的噪声生成器种子。
+        seed: 噪声生成器的种子（首次前向创建生成器时使用）。
         sigma_min: ``sigma`` 的下限（``sigma = exp(0.5*log_sigma2)`` 后 clamp）。
+        fresh_noise: 是否每次前向采样新噪声（论文语义）；``False`` 仅作消融对照。
     """
 
     def __init__(
@@ -66,6 +81,7 @@ class SGTEmbedding(nn.Module):
         *,
         seed: int = 0,
         sigma_min: float = 1e-6,
+        fresh_noise: bool = True,
     ) -> None:
         super().__init__()
         if not isinstance(base_embedding, nn.Module):
@@ -79,11 +95,17 @@ class SGTEmbedding(nn.Module):
             raise ValueError(f"seed 必须非负，实际 {seed}")
         if not (math.isfinite(sigma_min) and sigma_min > 0.0):
             raise ValueError(f"sigma_min 必须为正的有限值，实际 {sigma_min!r}")
+        if not isinstance(fresh_noise, bool):
+            raise TypeError(f"fresh_noise 必须是 bool，实际 {type(fresh_noise)!r}")
 
         self.base_embedding = base_embedding
         self.sgt = sgt
         self.seed = seed
         self.sigma_min = float(sigma_min)
+        self.fresh_noise = fresh_noise
+        # 首次前向时按输入 device 惰性创建（MPS 上 CPU generator 会直接报错）；
+        # 不注册为 buffer —— torch.Generator 不是张量/模块。
+        self._generator: torch.Generator | None = None
 
     # HF 内部（如 ``tie_weights`` / 量化 / resize）会访问 input embedding 的
     # ``weight``；转发到 base 以保持兼容（Llama-3.2 的 tie_word_embeddings=True）。
@@ -133,10 +155,21 @@ class SGTEmbedding(nn.Module):
         mu, log_sigma2 = self.sgt(x_sgt)  # mask=None：不做 padding mask（见模块 docstring）
         sigma = torch.exp(0.5 * log_sigma2).clamp(min=self.sigma_min)
 
-        # 每次前向重置种子，保证相同输入逐位可复现；device 必须与张量一致
-        # （MPS 上 CPU generator 会直接报错）。
-        generator = torch.Generator(device=x_sgt.device)
-        generator.manual_seed(self.seed)
+        # 噪声生成器：首次前向按输入 device 惰性创建（MPS 上 CPU generator 会报错）。
+        # fresh_noise=True 时持续推进（不重置），同一输入两次调用不同；
+        # fresh_noise=False 时每次重置到 seed（旧行为，仅消融对照）。
+        generator = self._generator
+        if generator is None:
+            generator = torch.Generator(device=x_sgt.device)
+            generator.manual_seed(self.seed)
+            self._generator = generator
+        elif generator.device.type != x_sgt.device.type:
+            raise RuntimeError(
+                f"噪声生成器位于 {generator.device}，输入位于 {x_sgt.device}；"
+                "请勿在前向之间把 wrapper 移到别的 device"
+            )
+        if not self.fresh_noise:
+            generator.manual_seed(self.seed)
         x_tilde = sample_sgt(x_sgt, mu, sigma, generator=generator)
         return x_tilde.to(dtype=x.dtype)
 

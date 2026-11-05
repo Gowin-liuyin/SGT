@@ -1,0 +1,198 @@
+{
+  "tag": "attack_mi_abscos_norm",
+  "model": ".models/llama-3.2-1b-instruct",
+  "dataset": "alpaca",
+  "n_tokens": 400,
+  "max_len": 96,
+  "seed": 0,
+  "threat_model": {
+    "attacker_position": "untrusted_server",
+    "attacker_knows": [
+      "tokenizer",
+      "embedding_table"
+    ],
+    "sgt_weights_hidden": true,
+    "greybox_rank_histogram": true,
+    "fresh_noise": true,
+    "whitebox_weights_tested": false,
+    "attacker_goal": "token_reconstruction",
+    "privacy_bound": "PAC-Privacy: Δ_KL(δ) ≤ MI(X; X̃), δ0 = 1/|V|（A7 口径 Eq (8)）",
+    "note": "未测试知道 SGT 权重的白盒对手（论文模型也不假设）"
+  },
+  "obfuscation": {
+    "mode": "sgt",
+    "ckpt": "results/ckpt_mi_abscos_norm.pt",
+    "sigma": null,
+    "sigma_mean": 0.38499951059675824,
+    "sigma_std": 0.07226951617548118,
+    "sigma_min": 0.0314912311732769,
+    "sigma_max": 0.6702940464019775,
+    "fresh_noise": true,
+    "noise": "x + mu + exp(0.5 * log_sigma2) * u（Eq (1)，逐 token 独立）",
+    "seed": 0,
+    "sgt_meta": {
+      "path": "results/ckpt_mi_abscos_norm.pt",
+      "step": null,
+      "d": 2048,
+      "hidden": 512,
+      "n_layers": 2,
+      "n_heads": 4,
+      "n_heads_source": "config",
+      "ffn_mult": 4,
+      "max_len": 256,
+      "dtype": "torch.float32",
+      "config_sgt": {
+        "hidden": 512,
+        "n_layers": 2,
+        "n_heads": 4,
+        "ffn_mult": 4,
+        "max_len": 256,
+        "sigma_init": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "n_tokens": 400,
+    "vocab_size": 128256,
+    "nn_fr": 97.75,
+    "nn_fr_at_r1": 97.75,
+    "mrp_fr": 97.75,
+    "mrp_r_star": 1,
+    "ttr_1": 97.75,
+    "ttr_10": 90.75,
+    "ttr_50": 83.0,
+    "symttr_10": 90.75,
+    "symttr_100": 80.25,
+    "hist_entropy": 0.49208630724256963,
+    "fr_by_r": {
+      "1": 97.75,
+      "10": 99.75,
+      "100": 99.75,
+      "1000": 100.0,
+      "64128": 100.0,
+      "128255": 100.0,
+      "128256": 100.0
+    },
+    "fr_by_r_r_values": [
+      1,
+      10,
+      100,
+      1000,
+      64128,
+      128255,
+      128256
+    ],
+    "rank_mean": 17834.8125,
+    "rank_median": 3696.0,
+    "mi_feature_mean": 1.8175538809150458,
+    "pac_adv": 19.66805183529889,
+    "mi_feature_median": 1.5491594848632813,
+    "mi_sum": 3722.3503481140137,
+    "mi_status": "ok",
+    "mi_estimator": "Eq(8) 逐特征 MC 均值（A7）",
+    "mi_n_pairs": 2000,
+    "mi_seed": 0
+  },
+  "beamclean": {
+    "status": "skipped",
+    "fr": null,
+    "sigma_hat_mean": null,
+    "n_sequences": 0,
+    "n_tokens": 0,
+    "reason": "--beamclean-n 0：显式跳过（不是静默跳过）"
+  },
+  "pii": {
+    "status": "not_applicable",
+    "pii_ratio": null,
+    "pii_units_recovered": null,
+    "reason": "PII-Ratio 只在 PUPA 上定义（论文 §7 / SPEC A20）"
+  },
+  "timings": {
+    "data_s": 0.004,
+    "lm_load_s": 16.972,
+    "tokenize_s": 0.29,
+    "obfuscation_s": 0.236,
+    "attacks_s": 0.376,
+    "beamclean_s": 0.0,
+    "pii_s": 0.0,
+    "total_s": 18.03
+  },
+  "sigma": {
+    "mean": 0.38499951059675824,
+    "std": 0.07226951617548118,
+    "min": 0.0314912311732769,
+    "max": 0.6702940464019775
+  },
+  "dataset_meta": {
+    "name": "tatsu-lab/alpaca",
+    "role": "obfuscation-quality evaluation set（论文 §7）",
+    "n_examples": 100,
+    "rows_meta": {
+      "cache_file": "/Users/yin/code/SGT/data_cache/alpaca/train_first100.jsonl",
+      "config": "default",
+      "dataset": "tatsu-lab/alpaca",
+      "fetched_at": "2026-11-05T13:55:57+00:00",
+      "n_fetched": 100,
+      "n_total": 52002,
+      "pages": [
+        0
+      ],
+      "requested": 100,
+      "source": "datasets-server.huggingface.co/rows",
+      "split": "train"
+    }
+  },
+  "sgt": {
+    "path": "results/ckpt_mi_abscos_norm.pt",
+    "step": null,
+    "d": 2048,
+    "hidden": 512,
+    "n_layers": 2,
+    "n_heads": 4,
+    "n_heads_source": "config",
+    "ffn_mult": 4,
+    "max_len": 256,
+    "dtype": "torch.float32",
+    "config_sgt": {
+      "hidden": 512,
+      "n_layers": 2,
+      "n_heads": 4,
+      "ffn_mult": 4,
+      "max_len": 256,
+      "sigma_init": 1.0
+    }
+  },
+  "meta": {
+    "timestamp": "2026-11-05T13:57:03+00:00",
+    "argv": [
+      "experiments/run_attack_suite.py",
+      "--model",
+      ".models/llama-3.2-1b-instruct",
+      "--dataset",
+      "alpaca",
+      "--max-examples",
+      "100",
+      "--max-len",
+      "96",
+      "--eval-tokens",
+      "400",
+      "--sgt-ckpt",
+      "results/ckpt_mi_abscos_norm.pt",
+      "--beamclean-n",
+      "0",
+      "--device",
+      "mps",
+      "--out",
+      "results/attack_mi_abscos_norm.json"
+    ],
+    "torch_version": "2.15.0",
+    "device": "mps",
+    "dtype": "float32",
+    "n_examples": 100,
+    "n_sequences": 7,
+    "eval_tokens_requested": 400,
+    "n_pairs": 2000,
+    "rank_chunk": 0,
+    "note": "降规模评测；论文规模见 SPEC D2/D3。BeamClean 为非官方最小实现（D5），PII 为确定性字符匹配（非 PAPILLON judge，A10）。"
+  }
+}

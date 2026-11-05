@@ -1,0 +1,77 @@
+{
+  "gate": "s1",
+  "name": "security",
+  "module_entry": "§1/§4.1/§6：威胁模型 + NN/MRP/BeamClean + PAC",
+  "checks": [
+    {
+      "id": "c-files",
+      "expected": ">=6 个 attack_*.json",
+      "actual": 10,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-threat-model",
+      "expected": "全部含完整威胁模型（表/tokenizer 已知、SGT 权重未知、灰盒直方图）",
+      "actual": "[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-baseline-reconstructable",
+      "expected": "nn_fr=mrp_fr=ttr_1=hist=0",
+      "actual": "{'n_tokens': 400, 'vocab_size': 128256, 'nn_fr': 0.0, 'nn_fr_at_r1': 0.0, 'mrp_fr': 0.0, 'mrp_r_star': 1, 'ttr_1': 0.0, 'ttr_10': 0.0, 'ttr_50': 0.0, 'symttr_10': 0.0, 'symttr_100': 0.0, 'hist_entropy': 0.0, 'fr_by_r': {'1': 0.0, '10': 100.0, '100': 100.0, '1000': 100.0, '64128': 100.0, '128255': 100.0, '128256': 100.0}, 'fr_by_r_r_values': [1, 10, 100, 1000, 64128, 128255, 128256], 'rank_mean': 1.0, 'rank_median': 1.0, 'mi_feature_mean': None, 'pac_adv': 100.0, 'mi_status': 'undefined_sigma_zero', 'mi_note': 'σ=0（无噪声）：Eq (8) 的 1/σ² 发散，MI 未定义；PAC 界极限 δ=1，故记 PAC-Adv=100%'}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-attack-defs",
+      "expected": "fr_by_r[1] == nn_fr",
+      "actual": "[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-sgt-resists-nn",
+      "expected": "5 个 SGT 变体 NN-FR >= 90%",
+      "actual": "weak=[] n=5",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-fresh-noise",
+      "expected": "同输入两次不同；同 seed 不同实例首次调用一致",
+      "actual": "diff=True reproducible=True",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-beamclean-consistency",
+      "expected": "BC-FR ≈ NN-FR；无保护基线 BC-FR=0",
+      "actual": "{'baseline_nn_fr': 0.0, 'baseline_bc_fr': 0.0, 'sgt_nn_fr': 100.0, 'sgt_bc_fr': 100.0}",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-baseline",
+      "expected": "无保护 PII-Ratio ≈ 1.0",
+      "actual": 1.0,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-drop",
+      "expected": "所有 SGT 变体 PII-Ratio < 0.5",
+      "actual": "[0.0, 0.0, 0.0, 0.0, 0.0, 0.010200005173290873]",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T22:04:47+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

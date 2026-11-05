@@ -26,8 +26,8 @@
     },
     {
       "id": "c-embedding-determinism",
-      "expected": "same seed equal, diff seed differ",
-      "actual": "eq=True neq=True",
+      "expected": "同实例两次不同；同 seed 新实例一致；异 seed 不同",
+      "actual": "fresh=True eq=True neq=True",
       "pass": true,
       "detail": ""
     },
@@ -62,7 +62,7 @@
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-05T21:32:33+0800",
+  "timestamp": "2026-11-05T22:04:37+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"

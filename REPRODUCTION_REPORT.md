@@ -16,8 +16,11 @@
    Table 1 的 “MI” 列不是互信息（F30，解析差距近 10 倍）；Eq (12) 按原式训练**发散为 NaN**（F31）。
 3. **端到端实验在降规模下只部分复现**：常数噪声（Fig.4）的 “Utility 掉 20pp 且 NN-FR≈0” 被复现（C21 VERIFIED）；
    MI 类损失确实比非 MI 损失压低 MI（C24 VERIFIED）；但 Table 1 的绝对数值与 Utility 列**未复现**（C8–C13、C23、C27 判 BLOCKED，F32）。
+4. **按论文的攻击与安全模型评测（S1，§4.5）**：攻击管线**正确复现**（无保护基线 NN/MRP/BeamClean-FR 全 0，BeamClean≈NN 与 Table 3 现象一致）；
+   在**同等 utility 损失**（≈−19…−20pp）下，SGT 的 NN 攻击成功率 0.25–2.25%，远低于常数噪声 σ=0.1 的 99.85%（方向支持论文机制）；
+   但所有 SGT 都工作在 utility 崩坏区，且按论文自己的 A7-MI 指标并不优于同噪声水平的常数噪声（1.82–2.24 vs 1.01）——**“保效用下的信息论保护”未复现**（F34）。
 4. **70B 实验（Table 2）不可执行**，只交付脚本与启动命令（D4，M9 BLOCKED）。
-5. 声明核对表 35 条：**10 VERIFIED / 3 FALSIFIED / 22 BLOCKED / 0 UNKNOWN**。
+5. 声明核对表 40 条：**14 VERIFIED / 3 FALSIFIED / 23 BLOCKED / 0 UNKNOWN**。
 
 ## 1. 复现范围
 
@@ -56,6 +59,7 @@
 | M8a | Utility（lm-eval + SGT embedding 注入） | PASS | 注入生效、Utility 聚合与手算一致 |
 | M8b | PUPA NN/BeamClean + PII-Ratio | PASS | 基线 FR=0、PII-Ratio=1.0 |
 | M9 | 大模型启动脚本（不执行） | PASS（执行 BLOCKED） | `exit 3 + status=blocked`，不加载 70B |
+| S1 | 安全模型与攻击（NN/MRP/BeamClean/威胁模型） | PASS | 基线 FR=0、BC≈NN、`fr_by_r[1]==nn_fr`、噪声新鲜性 |
 | M10 | 报告 + claim 表 + 回归 | PASS | 本文件 |
 
 ### 3.1 三处论文缺陷（详见 FINDINGS）
@@ -115,6 +119,44 @@ Fig.4（常数高斯噪声，2000 token；ε 用 Δ=embedding 范数 p99=1.1267�
 
 复现了论文 Fig.4 的核心现象：**在尚未产生混淆（NN-FR≈0，ε≳55）时 Utility 已下降约 20pp**（C21 VERIFIED）。ε 的绝对刻度取决于论文未给的 sensitivity Δ（A14）。
 
+
+### 4.5 安全模型与攻击评测（S1）
+
+**威胁模型（论文 §1/§4.1/§6 → 代码落点）**
+
+| 能力/假设 | 论文 | 本复现 | 证据字段 |
+|---|---|---|---|
+| 对手位置 | 不可信服务端，看到 $\tilde x$ | 同 | `threat_model.attacker_position` |
+| tokenizer / embedding 表 | 已知（否则 token 级重建无意义） | 已知 | `attacker_knows` |
+| SGT 权重 | 客户端私有、对手未知 | 未知 | `sgt_weights_hidden=true` |
+| 秩直方图（灰盒） | MRP 攻击允许 | 允许（$r^*$ 由本评测集直方图众数给出） | `greybox_rank_histogram=true` |
+| 白盒（持有 SGT 权重） | 不假设 | **未测试** | `whitebox_weights_tested=false` |
+| 隐私度量 | PAC：$\Delta_{KL}(\delta)\le\mathrm{MI}$ | A7 口径 Eq (8) 估计量 + 反解 | `metrics.pac_adv`、C7 |
+| 攻击目标 | token 级重建 | 同 | `attacker_goal` |
+
+**攻击结果（Alpaca 400 token，$|V|=128256$；BeamClean 为 PUPA n=5/T=24）**
+
+| 模型 | NN-FR | MRP-FR（$r^*$） | r≥1000 时 FR | Hist.Entr. | MI(A7) | PAC-Adv |
+|---|---|---|---|---|---|---|
+| 无保护基线 | 0.00 | 0.00 (1) | 100.0 | 0.000 | ∞（σ=0） | vacuous |
+| 常数噪声 σ=0.4 | 96.25 | 96.25 (1) | 100.0 | 0.483 | 1.01 | 11.6 |
+| AbsCos | 99.75 | 99.50 (7) | 100.0 | 0.508 | 5.18 | 49.9 |
+| CosSim | 99.75 | 99.50 (210) | 100.0 | 0.508 | 5.03 | 48.6 |
+| MI | 99.50 | 98.75 (69) | 100.0 | 0.499 | 2.24 | 23.7 |
+| MI+AbsCos | 99.75 | 99.50 (182) | 100.0 | 0.508 | 2.00 | 21.4 |
+| MI+AbsCos+Norm | 97.75 | 97.75 (1) | 100.0 | 0.492 | 1.82 | 19.7 |
+| BeamClean（abscos / 基线） | — | BC-FR 100.0 / 0.0 | — | — | — | — |
+| PII-Ratio（PUPA，基线 1.0） | — | SGT 0.00–0.0102 | — | — | — | — |
+
+**判定**
+
+1. **攻击管线复现成功**（C36/C37/C39 VERIFIED）：无保护时 NN/MRP/BeamClean 全部精确重建（FR=0），说明攻击与指标实现没有“假阴性”；`fr_by_r` 与 NN 自洽；SGT 下 BeamClean-FR≈NN-FR，正是论文 Table 3 报告的现象。
+2. **相对安全优势复现**（C38 VERIFIED）：在同一 utility 损失点（≈−19…−20pp），SGT 的 NN 攻击成功率 0.25–2.25%，而常数噪声 σ=0.1（utility −19.63pp）为 99.85%——即“噪声要毁掉 utility 才换来隐私，而 SGT 在同等 utility 损失下隐私强得多”，与论文 Fig.4 的论点一致。
+3. **绝对安全声明未复现**（C23/C27/F32/F34）：论文的关键工作点是 utility −0.01…−2.44pp 下 81–93% NN-FR；我们的 SGT 全部落在 σ_eff≈0.38–0.45 的强噪声区（utility −19…−21pp）。按论文自己的 A7-MI 口径，同噪声水平下 SGT 并不优于常数噪声（MI 1.82–2.24 vs 1.01）。
+4. **CosSim 的“远端秩洗白”未复现**（C40 BLOCKED）：论文 NN-FR 99.98% / MRP-FR 3.21%，我们 NN-FR 99.75% / MRP-FR 99.50%（$r^*=210$，最远 bin 仅 1.81%）——训练未收敛到反极性（$\cos$ 仅从 0.019 变到 0.018），所以“NN 指标不足”的论文证据在本复现中不成立。
+5. **安全语义的保留**：论文把 A7 量称为 MI（F30），因此“信息论保护”的严格表述无法成立；PAC-Adv 只能当代理指标。白盒对手（持有 SGT 权重）未测试，论文也不假设。
+6. **实现缺陷（已修）**：`SGTEmbedding` 原先每次前向重置噪声种子，违反“stochastic”定义；改为 `fresh_noise=True` 后，utility 变化 −20.57→−21.73pp（在 limit=50 抽样误差内），S1 门禁 `c-fresh-noise` 锁定该性质（F33）。
+
 ## 5. 论文问题清单
 
 见 `docs/FINDINGS.md`：F0（无官方代码）、F1–F5（公式排印）、F8–F11（MI 归约/因子）、F12–F14（超参/ε 缺失）、F15–F16（文字与表值矛盾）、F21（MI 估计器未定义）、F27（PAC 界语义）、**F29（Eq 6 不是上界）**、**F30（MI 不是 MI）**、**F31（Eq 12 发散）**、**F32（降规模下 Utility 未复现）**。
@@ -127,9 +169,9 @@ Fig.4（常数高斯噪声，2000 token；ε 用 Δ=embedding 范数 p99=1.1267�
 
 | 判定 | 数量 | 条目 |
 |---|---|---|
-| VERIFIED | 10 | C1、C2、C3、C5、C6、C7、C21、C24、C32、C34 |
+| VERIFIED | 14 | C1–C3、C5–C7、C21、C24、C32、C34、C36–C39 |
 | FALSIFIED | 3 | C4（Eq 6 不是上界）、C31（结论与 Table 1 自相矛盾，F16）、C35（MI 不是 MI） |
-| BLOCKED | 22 | C8–C20、C22、C23、C25–C30、C33 |
+| BLOCKED | 23 | C8–C20、C22、C23、C25–C30、C33、C40 |
 | UNKNOWN | 0 | — |
 
 ## 8. 复跑方式

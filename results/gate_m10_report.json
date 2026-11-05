@@ -20,7 +20,7 @@
     {
       "id": "c-claims-verdicts",
       "expected": "VERIFIED+FALSIFIED+BLOCKED == 全部行",
-      "actual": "{'VERIFIED': 10, 'FALSIFIED': 3, 'BLOCKED': 22}",
+      "actual": "{'VERIFIED': 14, 'FALSIFIED': 3, 'BLOCKED': 23}",
       "pass": true,
       "detail": ""
     },
@@ -40,7 +40,7 @@
     },
     {
       "id": "c-upstream-gates",
-      "expected": "11 个上游门禁 PASS",
+      "expected": "12 个上游门禁 PASS",
       "actual": "[]",
       "pass": true,
       "detail": ""
@@ -54,8 +54,8 @@
     },
     {
       "id": "c-state-all-pass",
-      "expected": "M0..M10（含 M8a/M8b）全 PASS",
-      "actual": "{'M0': 'PASS', 'M1': 'PASS', 'M2': 'PASS', 'M3': 'PASS', 'M4': 'PASS', 'M5': 'PASS', 'M6': 'PASS', 'M7': 'PASS', 'M8a': 'PASS', 'M8b': 'PASS', 'M9': 'PASS', 'M10': 'PASS'}",
+      "expected": "M0..M10 + S1（含 M8a/M8b）全 PASS",
+      "actual": "{'M0': 'PASS', 'M1': 'PASS', 'M2': 'PASS', 'M3': 'PASS', 'M4': 'PASS', 'M5': 'PASS', 'M6': 'PASS', 'M7': 'PASS', 'M8a': 'PASS', 'M8b': 'PASS', 'M9': 'PASS', 'S1': 'PASS', 'M10': 'PASS'}",
       "pass": true,
       "detail": ""
     },
@@ -69,7 +69,7 @@
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-05T21:32:42+0800",
+  "timestamp": "2026-11-05T22:04:47+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"

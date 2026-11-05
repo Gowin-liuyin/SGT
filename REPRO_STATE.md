@@ -19,14 +19,20 @@
 | M8a Utility | M6,M7 | PASS | `results/gate_m8a_utility.json` | lm-eval 注入 + Utility 聚合 |
 | M8b PII | M6,M7 | PASS | `results/gate_m8b_pii.json` | PUPA NN + PII-Ratio |
 | M9 大模型脚本 | M8 | PASS | `results/gate_m9_large.json` | 本机执行 BLOCKED（D4） |
-| M10 报告与回归 | M1..M9 | PASS | `results/gate_m10_report.json` | 35 条 claim 全部有结论 |
+| S1 安全模型与攻击 | M6,M7 | PASS | `results/gate_s1_security.json` | 威胁模型 + NN/MRP/BeamClean + 噪声新鲜性 |
+| M10 报告与回归 | M1..M9,S1 | PASS | `results/gate_m10_report.json` | 40 条 claim 全部有结论 |
 
 **关键结果**
 - PAC-Adv 反解逐位复现 Table 1/2（worst 0.11pp）：`results/gate_m1_theory.json`。
 - Table 1 降规模：5 变体见 `results/ablation_*.json` + `results/ablation_summary.json`；Utility 见 `results/utility_*.json`。
 - Fig.3：`results/fig3_ranksh.json`；Fig.4：`results/constnoise_low.json` + `results/constnoise_util_*.json`。
 - Table 3（PUPA）：`results/pupa_*.json`（NN only）。
-- 论文缺陷：F29（Eq 6 假上界）、F30（MI 非 MI）、F31（Eq 12 发散）、F32（降规模 Utility 未复现）。
+- 安全评测（S1）：`results/attack_*.json`、`results/pupa_*_beamclean.json`。
+  - 攻击管线正确：无保护基线 NN/MRP/BeamClean-FR=0；`fr_by_r[1]==nn_fr`；SGT 下 BeamClean≈NN。
+  - SGT 变体 NN-FR 97.8–99.8%、MRP-FR 97.8–99.5%、PII-Ratio≈0；但工作点在 utility −19…−21pp。
+  - 同效用点（≈−19pp）对照：SGT NN 成功率 0.25–2.25% vs 常数噪声 σ=0.1 的 99.85%（攻击成功）。
+  - 按 A7 MI：MI 组 1.82–2.24，非 MI 组 5.03–5.18；常数噪声 σ=0.4 为 1.01（同噪声水平下 SGT 的 MI 更高）。
+- 论文缺陷：F29（Eq 6 假上界）、F30（MI 非 MI）、F31（Eq 12 发散）、F32（降规模 Utility 未复现）、F33（噪声复用实现缺陷，已修）、F34（安全结论的工作点限制）。
 
 **回归结果**
 - `./repro.sh gates`：12/12 PASS（M0–M10，含 M8a/M8b）。

@@ -89,10 +89,10 @@ def main() -> int:
 
     # 7) 状态表包含 M0..M10 且初始状态合法
     state = (REPO_ROOT / "REPRO_STATE.md").read_text(encoding="utf-8")
-    rows = re.findall(r"^\|\s*(M\d+[ab]?)[^|]*\|[^|]*\|\s*(\w[\w ]*?)\s*\|", state, flags=re.M)
+    rows = re.findall(r"^\|\s*([MS]\d+[ab]?)[^|]*\|[^|]*\|\s*(\w[\w ]*?)\s*\|", state, flags=re.M)
     state_modules = [m for m, _ in rows]
     statuses = {s for _, s in rows}
-    expected_state = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8a", "M8b", "M9", "M10"]
+    expected_state = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8a", "M8b", "M9", "S1", "M10"]
     g.check("c-state-modules", expected=expected_state, actual=state_modules,
             passed=sorted(state_modules) == sorted(expected_state))
     g.check("c-state-status", expected="⊆ {PENDING, IN_PROGRESS, PASS, FAIL, BLOCKED}",

@@ -1,0 +1,160 @@
+{
+  "tag": "attack_constnoise",
+  "model": ".models/llama-3.2-1b-instruct",
+  "dataset": "alpaca",
+  "n_tokens": 400,
+  "max_len": 96,
+  "seed": 0,
+  "threat_model": {
+    "attacker_position": "untrusted_server",
+    "attacker_knows": [
+      "tokenizer",
+      "embedding_table"
+    ],
+    "attacker_lm": "目标 LM 本身（服务端托管模型；BeamClean 的 LM 先验）",
+    "sgt_weights_hidden": true,
+    "greybox_rank_histogram": true,
+    "mrp_prior": "本评测集的秩直方图众数 r*（任务单口径；SPEC A8 的独立校准集版本未测）",
+    "fresh_noise": true,
+    "whitebox_weights_tested": false,
+    "attacker_goal": "token_reconstruction",
+    "privacy_bound": "PAC-Privacy: Δ_KL(δ) ≤ MI(X; X̃), δ0 = 1/|V|（A7 口径 Eq (8)）",
+    "note": "未测试知道 SGT 权重的白盒对手（论文模型也不假设）"
+  },
+  "obfuscation": {
+    "mode": "constant",
+    "ckpt": null,
+    "sigma": 0.4,
+    "sigma_mean": 0.4,
+    "fresh_noise": true,
+    "noise": "x + sigma * u（逐 token 独立高斯，单次采样；seed 记录在案）",
+    "seed": 0
+  },
+  "metrics": {
+    "n_tokens": 400,
+    "vocab_size": 128256,
+    "nn_fr": 96.25,
+    "nn_fr_at_r1": 96.25,
+    "mrp_fr": 96.25,
+    "mrp_r_star": 1,
+    "ttr_1": 96.25,
+    "ttr_10": 88.75,
+    "ttr_50": 77.75,
+    "symttr_10": 88.75,
+    "symttr_100": 71.25,
+    "hist_entropy": 0.48269143799139647,
+    "fr_by_r": {
+      "1": 96.25,
+      "10": 99.75,
+      "100": 99.75,
+      "1000": 100.0,
+      "64128": 100.0,
+      "128255": 100.0,
+      "128256": 100.0
+    },
+    "fr_by_r_r_values": [
+      1,
+      10,
+      100,
+      1000,
+      64128,
+      128255,
+      128256
+    ],
+    "rank_mean": 6182.935,
+    "rank_median": 702.0,
+    "mi_feature_mean": 1.006941995099187,
+    "pac_adv": 11.614868881032518,
+    "mi_feature_median": 1.0045011291503907,
+    "mi_sum": 2062.217205963135,
+    "mi_status": "ok",
+    "mi_estimator": "Eq(8) 逐特征 MC 均值（A7）",
+    "mi_n_pairs": 2000,
+    "mi_seed": 0
+  },
+  "beamclean": {
+    "status": "skipped",
+    "fr": null,
+    "sigma_hat_mean": null,
+    "n_sequences": 0,
+    "n_tokens": 0,
+    "reason": "--beamclean-n 0：显式跳过（不是静默跳过）"
+  },
+  "pii": {
+    "status": "not_applicable",
+    "pii_ratio": null,
+    "pii_units_recovered": null,
+    "reason": "PII-Ratio 只在 PUPA 上定义（论文 §7 / SPEC A20）"
+  },
+  "timings": {
+    "data_s": 0.001,
+    "lm_load_s": 4.644,
+    "tokenize_s": 0.005,
+    "obfuscation_s": 0.011,
+    "attacks_s": 0.415,
+    "beamclean_s": 0.0,
+    "pii_s": 0.0,
+    "total_s": 5.097
+  },
+  "sigma": {
+    "mean": 0.4,
+    "std": 0.0,
+    "min": 0.4,
+    "max": 0.4
+  },
+  "dataset_meta": {
+    "name": "tatsu-lab/alpaca",
+    "role": "obfuscation-quality evaluation set（论文 §7）",
+    "n_examples": 100,
+    "rows_meta": {
+      "cache_file": "/Users/yin/code/SGT/data_cache/alpaca/train_first100.jsonl",
+      "config": "default",
+      "dataset": "tatsu-lab/alpaca",
+      "fetched_at": "2026-11-05T13:55:57+00:00",
+      "n_fetched": 100,
+      "n_total": 52002,
+      "pages": [
+        0
+      ],
+      "requested": 100,
+      "source": "datasets-server.huggingface.co/rows",
+      "split": "train"
+    }
+  },
+  "sgt": {
+    "applied": false
+  },
+  "meta": {
+    "timestamp": "2026-11-05T14:00:31+00:00",
+    "argv": [
+      "experiments/run_attack_suite.py",
+      "--model",
+      ".models/llama-3.2-1b-instruct",
+      "--dataset",
+      "alpaca",
+      "--max-examples",
+      "100",
+      "--max-len",
+      "96",
+      "--eval-tokens",
+      "400",
+      "--constant-sigma",
+      "0.4",
+      "--beamclean-n",
+      "0",
+      "--device",
+      "mps",
+      "--out",
+      "results/attack_constnoise.json"
+    ],
+    "torch_version": "2.15.0",
+    "device": "mps",
+    "dtype": "float32",
+    "n_examples": 100,
+    "n_sequences": 7,
+    "eval_tokens_requested": 400,
+    "n_pairs": 2000,
+    "rank_chunk": 0,
+    "note": "降规模评测；论文规模见 SPEC D2/D3。BeamClean 为非官方最小实现（D5），PII 为确定性字符匹配（非 PAPILLON judge，A10）。"
+  }
+}

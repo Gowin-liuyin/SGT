@@ -65,6 +65,16 @@
 | C34 | p.5 §4.1 | PAC 界不紧，实际隐私更强 | 降规模实测：abscos 的 PAC-Adv 上界 48.3%，NN 攻击失败率 99.83%（即成功率 0.17% ≪ 上界） | VERIFIED（方向性） | `results/ablation_abscos.json` |
 | C35 | p.8 §6.4 / Table 1 MI 列 | 报告的 “MI” 是互信息 | 按 Eq (8) 逐特征口径可复现数值，但解析核对表明它不是信息论 MI（$1+2/\sigma^2$ vs $\tfrac12\log(1+1/\sigma^2)$） | **FALSIFIED**（术语错误） | F30；`results/gate_m7_ablation.json`（c-feature-mi） |
 
+## 六、攻击与安全模型（S1）
+
+| id | 论文出处 | 论文主张 | 复现值 | 判定 | 证据 |
+|---|---|---|---|---|---|
+| C36 | §1/§4.1/§6 | 威胁模型：不可信服务端、知道 tokenizer 与 embedding 表、不知道客户端 SGT 权重；PAC 界 $\Delta_{KL}(\delta)\le\mathrm{MI}$ | 代码与结果 JSON 的 `threat_model` 块逐项实现（`attacker_position=untrusted_server`、`attacker_knows=[tokenizer,embedding_table]`、`sgt_weights_hidden=true`、`greybox_rank_histogram=true`、`whitebox_weights_tested=false`）；PAC 反解见 C7 | **VERIFIED** | `results/gate_s1_security.json`（c-threat-model）、`results/attack_*.json` |
+| C37 | §6.1–6.3 | NN/MRP/BeamClean 攻击与 FR 指标的定义 | 无保护基线 NN-FR=0、MRP-FR=0、BeamClean-FR=0、PII-Ratio=1.0；`fr_by_r[1]==nn_fr`；`fr_by_r` 随 r 单调（r≥10 即 100%） | **VERIFIED** | `results/attack_baseline.json`、`results/pupa_baseline_beamclean.json` |
+| C38 | §7.2 Fig 4 | 与常数噪声相比，SGT 在同一 Utility 损失下能提供更强的混淆 | 同效用点（≈−19…−20pp）：SGT NN 攻击成功率 0.25–2.25%；常数噪声 σ=0.1（utility −19.63pp）NN-FR 0.15%（攻击成功率 99.85%） | **VERIFIED**（方向与量级；utility 为 limit 50 抽样） | `results/attack_abscos.json`、`results/constnoise_util_0.1.json`、`results/ablation_summary.json` |
+| C39 | §6.2、Table 3 | 语言感知的 BeamClean 与 NN 攻击强度相当（BC-FR ≈ NN-FR） | PUPA n=5/T=24：无保护基线 NN 0.0 / BC 0.0；abscos SGT NN 100.0 / BC 100.0 | **VERIFIED**（小样本；自建 BeamClean，D5） | `results/pupa_baseline_beamclean.json`、`results/pupa_abscos_beamclean.json` |
+| C40 | §6.1、Fig 3、Table 1 | CosSim 训练的 SGT 会把信息“洗白”到远端秩：NN-FR 99.98% 但 MRP-FR 仅 3.21% | 我们 CosSim 变体：NN-FR 99.75%、MRP-FR 99.50%（$r^*=210$，最远 bin 质量 1.81%）；远端攻击成功率≈0 | **BLOCKED**（现象未复现：训练未收敛到反极性，见 F32/F34） | `results/attack_cossim.json`、`results/fig3_ranksh.json` |
+
 ## 判定口径
 
 - **VERIFIED**：本仓库命令可复跑，证据 JSON 与论文值在 SPEC §9 阈值内，或命题在数学上被严格验证。
