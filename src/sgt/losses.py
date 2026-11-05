@@ -58,6 +58,12 @@ def _flat_mask(mask, prefix_shape, *, name: str, device: torch.device) -> torch.
     return m.to(device=device).bool().reshape(-1)
 
 
+def _validate_mask_shape(mask, shape) -> None:
+    m = torch.as_tensor(mask)
+    if tuple(m.shape) != tuple(shape):
+        raise ValueError(f"mask 形状必须为 {tuple(shape)}，实际 {tuple(m.shape)}")
+
+
 def mi_loss(
     x_tilde,
     x_prime,
@@ -210,11 +216,7 @@ def abs_cos_loss(x, x_tilde, *, mask=None, reduce=True) -> torch.Tensor:
     per_token = _cosine_terms(x, x_tilde).abs()
     if not reduce:
         if mask is not None:
-            m = torch.as_tensor(mask)
-            if tuple(m.shape) != tuple(per_token.shape):
-                raise ValueError(
-                    f"mask 形状必须为 {tuple(per_token.shape)}，实际 {tuple(m.shape)}"
-                )
+            _validate_mask_shape(mask, per_token.shape)
         return per_token
     return _masked_mean(per_token, mask)
 
@@ -224,11 +226,7 @@ def cos_sim_loss(x, x_tilde, *, mask=None, reduce=True) -> torch.Tensor:
     per_token = _cosine_terms(x, x_tilde)
     if not reduce:
         if mask is not None:
-            m = torch.as_tensor(mask)
-            if tuple(m.shape) != tuple(per_token.shape):
-                raise ValueError(
-                    f"mask 形状必须为 {tuple(per_token.shape)}，实际 {tuple(m.shape)}"
-                )
+            _validate_mask_shape(mask, per_token.shape)
         return per_token
     return _masked_mean(per_token, mask)
 
