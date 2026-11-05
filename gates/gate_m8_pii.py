@@ -68,7 +68,7 @@ def main() -> int:
 
             def __call__(self, texts, add_special_tokens=True, padding=False, truncation=False):
                 ids = [[ord(c) % 4096 + 2 for c in t] for t in texts]
-                return {"input_ids": ids}
+                return {"input_ids": ids, "attention_mask": [[1] * len(x) for x in ids]}
 
             def decode(self, ids, skip_special_tokens=True):
                 return "".join(chr((i - 2) % 4096) if i >= 2 else "" for i in ids)

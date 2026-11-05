@@ -1,0 +1,84 @@
+{
+  "gate": "m8b",
+  "name": "pii",
+  "module_entry": "Table 3：PUPA NN/BeamClean FR + PII-Ratio",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-fraction",
+      "expected": 0.45,
+      "actual": 0.45,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-ratio-identity",
+      "expected": 1.0,
+      "actual": 1.0,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-ratio-redacted",
+      "expected": 0.0,
+      "actual": 0.0,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-ratio-undefined",
+      "expected": "defined=False",
+      "actual": false,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pii-units",
+      "expected": 0.5,
+      "actual": 0.5,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pupa-fields",
+      "expected": "user_query 存在且非空",
+      "actual": "keys=['conversation_hash', 'pii_units', 'predicted_category', 'redacted_query', 'target_response', 'user_query']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pupa-eval-synthetic",
+      "expected": "nn.fr in [0,100] 且 JSON 合法",
+      "actual": "fr=0.0",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pupa-no-target-response",
+      "expected": "rows 只引用 user_query",
+      "actual": "row_keys=['beamclean', 'conversation_hash', 'index', 'n_tokens', 'nn', 'pii_reference_text']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pupa-results-schema",
+      "expected": "所有 pupa_*.json 含 nn/beamclean",
+      "actual": "1 个文件, bad=[]",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T20:12:36+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}
