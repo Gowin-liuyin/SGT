@@ -1,0 +1,126 @@
+{
+  "gate": "m4",
+  "name": "metrics",
+  "module_entry": "§6 p.7-8：rank/NN/MRP/TTR/SymTTR/HistEntr/PAC/BeamClean",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-ranks",
+      "expected": "== brute force",
+      "actual": "neq=0",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-ties",
+      "expected": "tie -> smaller id wins (rank 1 for id 3)",
+      "actual": "rank_of_id5=2",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-ttr",
+      "expected": 66.66666666666667,
+      "actual": 66.666667,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-symttr",
+      "expected": "(33.333333333333336, 0.0)",
+      "actual": "(33.333333, 0.0)",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-histent-uniform",
+      "expected": 1.0,
+      "actual": "1.000000",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-histent-single",
+      "expected": 0.0,
+      "actual": "0.000000",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-fr",
+      "expected": "(100.0, 0.0)",
+      "actual": "(100.0, 0.0)",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-nn",
+      "expected": "argmin",
+      "actual": "neq=0",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mrp-rank",
+      "expected": 3,
+      "actual": 3,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mrp",
+      "expected": "3rd nearest",
+      "actual": "neq=0",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-pac",
+      "expected": "1.11->12.69±0.15, 22.19->100",
+      "actual": "12.67, 100.00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-epsdp",
+      "expected": "4.8448",
+      "actual": "4.8448",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-epsdp-monotone",
+      "expected": "eps(sigma=2) < eps(sigma=1)",
+      "actual": "2.4224 < 4.8448",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-beamclean-nonoise",
+      "expected": "sigma=1e-3 FR == NN FR",
+      "actual": "0.00% vs NN 0.00%",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-beamclean-monotone",
+      "expected": "FR non-decreasing with sigma",
+      "actual": "[0.0, 0.0, 46.75]",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:24:39+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

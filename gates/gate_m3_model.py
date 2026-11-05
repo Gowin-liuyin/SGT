@@ -46,6 +46,15 @@ def main() -> int:
     g.check("c-init-sigma", expected="sigma == sigma_init (±1e-6)", actual=f"max|sigma-1|={dev:.3e}",
             passed=dev < 1e-6)
 
+    # 初始化检查完毕后，随机化全部参数（零初始化头会使输出对输入不敏感，
+    # 序列依赖/梯度检查必须在非零头权重下进行；见 model.py Note）
+    torch.manual_seed(123)
+    with torch.no_grad():
+        for p_ in m.parameters():
+            p_.normal_(0.0, 0.05)
+    mu, lv = m(x)
+    sig = torch.exp(0.5 * lv)
+
     mu2, lv2 = m(x)
     g.check("c-determinism", expected="bitwise equal",
             actual=f"mu={torch.equal(mu, mu2)} lv={torch.equal(lv, lv2)}",

@@ -1,0 +1,105 @@
+{
+  "gate": "m3",
+  "name": "model",
+  "module_entry": "Def 3.1 / Eq (1) 的 µθ, Σθ 估计器（SPEC A1）",
+  "checks": [
+    {
+      "id": "c-import",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-shape",
+      "expected": "[3, 6, 8]",
+      "actual": "[3, 6, 8]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-init-mu",
+      "expected": "|mu|max < 1e-12",
+      "actual": "0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-init-sigma",
+      "expected": "sigma == sigma_init (±1e-6)",
+      "actual": "max|sigma-1|=0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-determinism",
+      "expected": "bitwise equal",
+      "actual": "mu=True lv=True",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-seqdep",
+      "expected": "every position changes > 1e-6",
+      "actual": "min_change=9.590e-05",
+      "pass": true,
+      "detail": "per_pos=[0.0001, 0.0001, 0.0001, 0.0363, 0.0001, 0.0001]"
+    },
+    {
+      "id": "c-posdep",
+      "expected": "permuted inputs give different outputs",
+      "actual": "max|diff|=6.328e-02",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-padding",
+      "expected": "valid positions invariant (<1e-6)",
+      "actual": "dmu=0.000e+00 dlv=0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-grad",
+      "expected": "all finite, >=8 tensors nonzero",
+      "actual": "finite=True nonzero=29",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-state-dict",
+      "expected": "identical after load",
+      "actual": "0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-sample-eq1",
+      "expected": "x+mu+sigma*u",
+      "actual": "0.000e+00",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-stochastic",
+      "expected": "same seed equal, diff seed differ",
+      "actual": "eq=True neq=True",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-param-report",
+      "expected": "report only",
+      "actual": "7488 params (d=8,hidden=16)",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-05T19:24:38+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

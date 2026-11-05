@@ -39,7 +39,7 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 # 校验与分块距离
 # --------------------------------------------------------------------------- #
-def _as_float_tensor(value, name: str) -> torch.Tensor:
+def _as_float_tensor(value) -> torch.Tensor:
     t = torch.as_tensor(value)
     if not t.is_floating_point():
         t = t.to(torch.get_default_dtype())
@@ -47,7 +47,7 @@ def _as_float_tensor(value, name: str) -> torch.Tensor:
 
 
 def _validate_table(embedding_table) -> torch.Tensor:
-    table = _as_float_tensor(embedding_table, "embedding_table")
+    table = _as_float_tensor(embedding_table)
     if table.ndim != 2:
         raise ValueError(f"embedding_table 必须为 [V, d]，实际 {tuple(table.shape)}")
     if table.shape[0] < 1 or table.shape[1] < 1:
@@ -56,7 +56,7 @@ def _validate_table(embedding_table) -> torch.Tensor:
 
 
 def _validate_points(x_tilde, table: torch.Tensor) -> torch.Tensor:
-    x = _as_float_tensor(x_tilde, "x_tilde")
+    x = _as_float_tensor(x_tilde)
     if x.ndim != 2:
         raise ValueError(f"x_tilde 必须为 [N, d]，实际 {tuple(x.shape)}")
     if x.shape[1] != table.shape[1]:
@@ -77,9 +77,12 @@ def _prepare(x_tilde, embedding_table, chunk):
     table = _validate_table(embedding_table)
     x = _validate_points(x_tilde, table)
     chunk = _validate_chunk(chunk)
-    # 统一 dtype/device；float64 输入保持 float64（并列判定更可靠）。
+    # 统一 dtype/device；float64 输入保持 float64（并列判定更可靠）；
+    # 半精度上采样到 float32，避免距离量化制造伪并列。
     dtype = torch.promote_types(x.dtype, table.dtype)
-    if dtype not in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+    if dtype in (torch.float16, torch.bfloat16):
+        dtype = torch.float32
+    elif dtype not in (torch.float32, torch.float64):
         dtype = torch.get_default_dtype()
     x = x.to(dtype=dtype)
     table = table.to(device=x.device, dtype=dtype)
@@ -206,10 +209,16 @@ def symttr(ranks, k, vocab_size) -> float:
     return float(100.0 * ((r > k) & (r < vocab_size - k)).to(torch.float64).mean())
 
 
+def _rank_counts(ranks: torch.Tensor, vocab_size: int) -> torch.Tensor:
+    """把 1-based 秩计数成 ``[V]``（index 0 ↔ rank 1）。"""
+    counts = torch.bincount(ranks, minlength=vocab_size + 1)
+    return counts[1 : vocab_size + 1].long()
+
+
 def rank_histogram(ranks, vocab_size) -> torch.Tensor:
     """秩直方图计数，形状 ``[V]``（int64）。"""
     r = _validate_ranks(ranks, vocab_size)
-    return torch.bincount(r, minlength=int(vocab_size))[: int(vocab_size)].long()
+    return _rank_counts(r, int(vocab_size))
 
 
 def hist_entropy(ranks, vocab_size) -> float:
@@ -219,10 +228,12 @@ def hist_entropy(ranks, vocab_size) -> float:
     if vocab_size == 1:
         # H[R] = log(V) = 0，约定返回 0（无不确定性）。
         return 0.0
-    counts = torch.bincount(r, minlength=vocab_size).to(torch.float64)
+    counts = _rank_counts(r, vocab_size).to(torch.float64)
     p = counts / counts.sum()
     nz = p > 0
     entropy = float(-(p[nz] * torch.log(p[nz])).sum())
+    if entropy <= 0.0:
+        return 0.0
     return entropy / math.log(vocab_size)
 
 
