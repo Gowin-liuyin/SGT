@@ -1,0 +1,79 @@
+# **非论文语义**：Protopia 官方文档的 SGT 训练配方（对照实验）。
+#
+# 来源：https://docs.protopia.ai/engine/1.2.1/recommendations_for_training_llms
+# 记录见 docs/FINDINGS.md F36、docs/EXTERNAL_EVIDENCE.md §4。
+#
+# 本配置训练出的 SGT **不是**论文 arXiv:2506.09452v1 Eq (8) 语义的实现：损失里没有
+# Mahalanobis 项，L_N 是去掉 Mahalanobis 的 std-log-ratio；架构用 SGTModel 近似厂商的
+# 「与基座同类型 transformer」。产出的 JSON/checkpoint 带 variant=documented_recipe、
+# note="非论文语义：按厂商文档配方"，下游不得把它当作论文值引用。
+#
+# 值来源逐项标注（文档值 vs 本机近似选择）：
+#
+# 文档值（recommendations_for_training_llms）：
+#   - 损失 (1-α)(w1·L_M1+w2·L_M2)+α(β·L_N+γ·L_S)；
+#     α=0.7、β（std_log_ratio_loss_weight）=0.01、
+#     γ（input_embedding_similarity_loss_weight）=1.00、
+#     w1（distillation_layer_cosine_distance_loss_weight）=0.0、
+#     w2（distillation_layer_l2_distance_loss_weight）=1.4；
+#   - 蒸馏层 = 最后一层（文档推荐 truncated_layer_index 取最后一层）；
+#   - AdamW：lr = 基座最终 lr（Llama3.1-8B 为 3e-4；Llama3.1-70B 为 1.5e-4）、
+#     betas=[0.9,0.95]、eps=1e-5、末层 weight decay=0（本任务统一 weight_decay=0）、
+#     线性 warmup 为总步数的 1%–5% + cosine 退火到 cosine_decay_factor*lr；
+#   - SGT 必须 fp32，基座可以 bf16；
+#   - σ scale 范围 (1e-3, 1.0)（directly_learn_stds=False 时的推荐起点）。
+#
+# 本机近似选择（文档未给数值或本仓库无对应组件，**不是文档值**）：
+#   - 架构：用 sgt.model.SGTModel（双向 TransformerEncoder + µ/logΣ² 两个头）近似文档的
+#     mean/std 两个 estimator；层数/宽度/n_heads/位置编码都是本仓库既有选择。
+#   - 优化：文档只给「1%–5% warmup」，本任务取 5%；cosine 最低倍率取 0.1（lr_min_factor）。
+#     warmup+cosine 计划与 SGTModel 的余弦同一口径，见 run_documented_recipe.lr_multiplier。
+#   - batch_size=1 / steps=800：本机 MPS 降规模（文档未给 batch/steps；论文给的是
+#     1×A100 ≈ 6 小时/变体）。
+#   - data.max_examples=20000：本机上限，与 configs/ablation.yaml 一致。
+model: .models/llama-3.2-1b-instruct
+
+sgt:
+  d: 2048              # = Llama-3.2-1B 的 hidden_size
+  hidden: 2048
+  n_layers: 2
+  n_heads: 8
+  ffn_mult: 4
+  max_len: 256         # 与 train.max_len 一致（pos_encoding=sinusoidal，不受此上限约束）
+  sigma_init: 0.01
+  sigma_min: 1.0e-3    # 文档 scale 下界
+  sigma_max: 1.0       # 文档 scale 上界
+  pos_encoding: sinusoidal
+  final_norm: true
+  mu_scale: null       # 文档未给 µ 的有界参数化；本配置取无界（模型默认）
+  # 其余构造参数（sigma_floor / dropout / pos_emb_init_std）取 SGTModel 默认值，
+  # 由 run_documented_recipe.build_sgt_config 补全后写入 checkpoint 的 config["sgt"]。
+
+train:
+  # PyYAML 把 `1e-4` 解析成字符串；写成带小数点的 `1.0e-4` 才是 float。
+  lr: 3.0e-4
+  betas: [0.9, 0.95]
+  eps: 1.0e-5
+  weight_decay: 0.0
+  steps: 800
+  batch_size: 1
+  max_len: 256
+  seed: 0
+  grad_clip: 1.0
+  warmup_fraction: 0.05
+  lr_min_factor: 0.1
+  lm_dtype: bfloat16   # 基座 bf16；SGT 恒为 fp32（文档要求）
+  log_every: 50
+
+recipe:
+  alpha: 0.7
+  beta: 0.01
+  gamma: 1.0
+  w1: 0.0
+  w2: 1.4
+
+data:
+  parquet: .models/openorca_1M.parquet   # 缺失时回退 sgt.data.load_openorca（rows API）
+  max_examples: 20000
+  frac: 0.15                             # 仅回退路径记录用（论文协议比例）
+  dataset: Open-Orca/OpenOrca

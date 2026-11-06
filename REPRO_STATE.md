@@ -1,6 +1,6 @@
 # 复现状态（会话恢复用）
 
-更新时间: 2026-11-06 14:35 (Asia/Shanghai)
+更新时间: 2026-11-06 20:05 (Asia/Shanghai)
 论文: Learning Obfuscations Of LLM Embedding Sequences: Stained Glass Transform (arXiv:2506.09452v1)
 论文源: `2506.09452v1.pdf`；代码源: 无官方实现（原仓库为空），本仓库即复现实现
 当前阶段: Phase R 完成（逐行一致性 + 正式重跑 + 判定）
@@ -48,9 +48,15 @@
   - Comp.Entr./CosSim/MI 单损失几乎不产生混淆（NN-FR 0.13–0.87 vs 34.4–100），其中 Comp.Entr. 与 Eq (12) 的“µ 梯度恒 0”矛盾（F35/C43）。
 - 判定：**机制层复现（Eq 9/8 的混淆）+ 协议/指标层复现成功；论文核心的“保效用隐私”未复现（C42 BLOCKED）**。
 
+**厂商文档配方对照实验（2026-11-06 晚）**
+- 新增 `experiments/run_documented_recipe.py` + `configs/documented_recipe.yaml` + `tests/test_documented_recipe.py`（非论文语义，明确标注）。
+- 两个变体（800 步）：µ 无界 → NN-FR 100.0 / Utility −23.81pp；µ 有界 → NN-FR 38.75 / Utility −26.32pp。均远离论文的（−0.01…−2.44pp, 81–93%）。→ F36b。
+- 证据：`results/attack_recipe*.json`、`results/utility8_recipe*.json`、`results/table1_reproduction.json` 的 `documented_recipe_variants`；结论见报告 §4.7。
+
 **下一动作**
 1. 若能拿到作者超参或 A100 集群：按 `configs/ablation.yaml` 直接重跑 6 行（C42 的判定需要论文级预算才能从 BLOCKED 变为结论）。
-2. 其它保持现状；无待修门禁。
+2. 若要进一步逼近文档配方：用「从基座初始化的全尺寸 transformer」做 SGT（本机 16GB 不可行），需 A100。
+3. 其它保持现状；无待修门禁。
 3. 若要继续提高复现度：按论文级预算重训（更多步数/数据）→ Table 1 的 Utility 列（F32）；有 A100 集群时跑 M9 脚本。
 
 **阻塞项**

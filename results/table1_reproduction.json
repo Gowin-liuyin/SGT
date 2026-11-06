@@ -161,5 +161,31 @@
     "pac": 12.69
    }
   }
- }
+ },
+ "documented_recipe_variants": [
+  {
+   "label": "厂商文档配方（mu_scale=None，µ 无界，µ_norm≈53）",
+   "utility_pp": -23.81,
+   "nn_fr": 100.0,
+   "mrp_fr": 99.5,
+   "mrp_r_star": 20847,
+   "symttr_10": 100.0,
+   "symttr_100": 100.0,
+   "hist_entropy_pct": 50.85,
+   "mi": 2850.14,
+   "pac_adv": 100.0
+  },
+  {
+   "label": "厂商文档配方 + µ 有界（mu_scale=0.1，µ_norm≈4.5）",
+   "utility_pp": -26.32,
+   "nn_fr": 38.75,
+   "mrp_fr": 38.75,
+   "mrp_r_star": 1,
+   "symttr_10": 15.0,
+   "symttr_100": 8.75,
+   "hist_entropy_pct": 16.48,
+   "mi": 924.24,
+   "pac_adv": 100.0
+  }
+ ]
 }
