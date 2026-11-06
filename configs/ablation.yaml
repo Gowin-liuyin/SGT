@@ -33,14 +33,16 @@ d: 2048
 sgt:
   # A1（论文只说 "modeled as transformers"，未给宽度）：512 是复现选择。
   # GAP-1 由模型/训练侧负责；若 SGTModel 的默认宽度改为 d=2048，应删掉这里的覆盖。
-  hidden: 512
+  # GAP-1：宽度可配；本机取 2048（= embedding 宽度），与论文「µθ/Σθ 建模为 transformer」
+  # 的输入输出同维一致。论文未给宽度（A1），512 也可跑但表达力更弱。
+  hidden: 2048
   n_layers: 2
-  n_heads: 4
+  n_heads: 8
   ffn_mult: 4
   # 与 train.max_len 一致：可学习位置编码只在训练长度内被训练，评测 prompt 超过该长度时
   # SGT 无定义（run_utility.py 会显式报错/按 --max-len-fallback 记录，而不是静默外推）。
   max_len: 256
-  sigma_init: 1.0
+  sigma_init: 0.01
   # A21 / GAP-3：Σθ 的上界（σ ≤ 0.05）。Eq (12) 的 Comp.Entr. 按字面无下界、训练发散
   # （F31），有界参数化是让该行可产有限结果的声明性实现选择；其余变体统一使用同一上界。
   # 0.05 是复现选择（论文未给）。
@@ -49,12 +51,12 @@ sgt:
   # mu_scale = µθ 的 tanh 有界尺度；sigma_floor = Σθ 的下界（与 sigma_max 对称）；
   # pos_encoding = sinusoidal 位置编码（非可学习，不受 max_len 限制）。
   final_norm: true
-  mu_scale: 1.0
+  mu_scale: 0.1
   sigma_floor: 0.005
   pos_encoding: sinusoidal
 
 train:
-  steps: 2000
+  steps: 800
   # 注意：PyYAML 把 `1e-4` 解析成字符串，写成 `1.0e-4` 才是 float（数值相同）。
   lr: 1.0e-3
   batch_size: 1
@@ -85,10 +87,13 @@ eval:
 # alphas：Eq (11) 的 α1..α3。论文只给 α_i ∈ R+（A12）；这里取 α1 = 1/d = 4.8828125e-4，
 # 即 MI 损失按特征维平均（与论文把 MI 报成 "feature level" 的口径一致），
 # 否则 Eq (8) 的 Σ_j 展开使 L_MI ~ O(d) ≫ L_U，优化会被 MI 采样噪声主导。
+# 依据：初始化时逐项梯度范数（真实 1B + hidden=2048 实测）为 u≈91.8、acs≈3.1、mnp≈11.8
+# （mi≈7.3e4，故 α1=1/d 后≈35.6）。Adam 逐参数归一化，α 主要决定各项在方向上的占比；
+# 取 α_acs=200、α_mnp=200 使三项与 L_U 同量级（A12 复现选择，非论文值）。
 alphas:
   mi: 4.8828125e-4
-  acs: 1.0
-  mnp: 1.0
+  acs: 200.0
+  mnp: 200.0
 variants:
   comp_entropy: {loss_terms: [cge]}
   cossim: {loss_terms: [bcs]}

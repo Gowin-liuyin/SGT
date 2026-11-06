@@ -20,7 +20,7 @@
     {
       "id": "c-claims-verdicts",
       "expected": "VERIFIED+FALSIFIED+BLOCKED == 全部行",
-      "actual": "{'VERIFIED': 15, 'FALSIFIED': 3, 'BLOCKED': 24}",
+      "actual": "{'VERIFIED': 15, 'FALSIFIED': 4, 'BLOCKED': 24}",
       "pass": true,
       "detail": ""
     },
@@ -69,7 +69,7 @@
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-06T11:50:02+0800",
+  "timestamp": "2026-11-06T14:31:18+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"

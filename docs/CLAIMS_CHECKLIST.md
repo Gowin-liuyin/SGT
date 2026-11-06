@@ -21,12 +21,12 @@
 
 | id | 论文出处 | 论文值 | 复现值 | 判定 | 证据 |
 |---|---|---|---|---|---|
-| C8 | Table 1 行 Comp. Entr. | −13.84 / 88.41 / 88.41 / 75.99 / 49.75 / 58.60 / 22.19 / 100.0 | 按论文原式（Eq 12 → $-\log\lvert\Sigma\rvert$）训练发散，$\sigma^2\to$ NaN（250 步内）；无数值可比 | **BLOCKED**（F31：论文必有未声明的 σ 上界） | `results/ablation_summary.json`（status=diverged）；F31 |
-| C9 | Table 1 行 CosSim | −5.49 / 99.98 / 3.21 / 1.43 / 1.07 / 2.47 / 3.2e19 / 100.0 | −20.96 / 99.67 / 99.67 / 99.00 / 95.50 / 0.542 / 4.85 / 47.1 | **BLOCKED**（降规模：250 步、4000 条、B=1×T=256） | `results/ablation_cossim.json`、`results/utility_cossim.json` |
-| C10 | Table 1 行 AbsCos | −0.01 / 94.90 / 94.90 / 93.36 / 92.86 / 87.62 / 6e9 / 100.0 | −20.57 / 99.83 / 99.50 / 98.83 / 96.00 / 0.541 / 4.99 / 48.3 | **BLOCKED**（同上；Utility 未复现，见 F32） | `results/ablation_abscos.json`、`results/utility_abscos.json` |
-| C11 | Table 1 行 MI | −0.72 / 34.43 / 34.43 / 18.96 / 17.39 / 23.96 / 1.48 / 16.39 | −20.87 / 99.67 / 99.17 / 98.50 / 86.83 / 0.528 / 2.26 / 23.9 | **BLOCKED** | `results/ablation_mi.json`、`results/utility_mi.json` |
-| C12 | Table 1 行 MI+AbsCos | −2.44 / 81.23 / 81.23 / 71.36 / 66.88 / 75.72 / 1.91 / 20.56 | −20.58 / 99.83 / 99.67 / 99.17 / 95.83 / 0.541 / 2.00 / 21.4 | **BLOCKED** | `results/ablation_mi_abscos.json`、`results/utility_mi_abscos.json` |
-| C13 | Table 1 行 MI+AbsCos+Norm | −1.97 / 93.00 / 93.00 / 90.42 / 88.15 / 91.90 / 1.11 / 12.69 | −19.10 / 97.33 / 97.33 / 90.83 / 79.00 / 0.521 / 1.63 / 17.9 | **BLOCKED**（MI/PAC 方向一致：该配置 MI 最低） | `results/ablation_mi_abscos_norm.json`、`results/utility_mi_abscos_norm.json` |
+| C8 | Table 1 行 Comp. Entr. | −13.84 / 88.41 / 88.41 / 75.99 / 49.75 / 58.60 / 22.19 / 100.0 | −27.97 / 0.87 / 0.87 / 0.07 / 0.00 / 48?→0.48% / 1.31 / 14.7（8 任务 Utility = 8×limit 10） | **BLOCKED**（且与 Eq (12) 的数学性质矛盾：$L^{CGE}$ 对 µ 梯度恒 0，F35/C43） | `results/ablation_comp_entropy.json`、`results/utility8_comp_entropy.json`、`results/table1_reproduction.json` |
+| C9 | Table 1 行 CosSim | −5.49 / 99.98 / 3.21 / 1.43 / 1.07 / 2.47 / 3.2e19 / 100.0 | −24.41 / 0.13 / 0.13 / 0.00 / 0.00 / 0.09% / 21.85 / 100.0 | **BLOCKED**（符号余弦在本机被 utility 压住，未产生反极性） | `results/ablation_cossim.json`、`results/utility8_cossim.json` |
+| C10 | Table 1 行 AbsCos | −0.01 / 94.90 / 94.90 / 93.36 / 92.86 / 87.62 / 6e9 / 100.0 | −27.97 / **91.40** / 91.40 / **82.40** / 73.00 / 55.49% / 4.52 / 44.2 | **BLOCKED**（混淆度量接近论文，Utility 差 28pp） | `results/ablation_abscos.json`、`results/utility8_abscos.json` |
+| C11 | Table 1 行 MI | −0.72 / 34.43 / 34.43 / 18.96 / 17.39 / 23.96 / 1.48 / 16.39 | −19.91 / 0.40 / 0.40 / 0.00 / 0.00 / 0.24% / 19.63 / 100.0 | **BLOCKED**（MI 单损失在本机 α 量级下不推动 µ） | `results/ablation_mi.json`、`results/utility8_mi.json` |
+| C12 | Table 1 行 MI+AbsCos | −2.44 / 81.23 / 81.23 / 71.36 / 66.88 / 75.72 / 1.91 / 20.56 | −24.48 / **87.93** / 87.93 / **80.53** / 73.27 / 54.52% / 7.19 / 66.6 | **BLOCKED**（混淆度量接近/更好，Utility 差 22pp） | `results/ablation_mi_abscos.json`、`results/utility8_mi_abscos.json` |
+| C13 | Table 1 行 MI+AbsCos+Norm | −1.97 / 93.00 / 93.00 / 90.42 / 88.15 / 91.90 / 1.11 / 12.69 | −26.98 / **87.27** / 87.27 / 72.07 / 61.33 / 50.48% / 19.49 / 100.0 | **BLOCKED**（NN-FR 接近，Utility 差 25pp，PAC 列不可比） | `results/ablation_mi_abscos_norm.json`、`results/utility8_mi_abscos_norm.json` |
 
 ## 三、Table 2（两 epoch 全 OpenOrca，p.10）
 
@@ -80,7 +80,9 @@
 | id | 论文出处 | 论文主张 | 复现值 | 判定 | 证据 |
 |---|---|---|---|---|---|
 | C41 | §3–§7 全文 | 复现实现与论文逐行一致 | `docs/CONFORMANCE.md` 列出 CF-01..CF-36；审计发现 10 个未声明偏差（GAP-1..GAP-10），已全部关闭：SGT 宽度可配/有界 µ、σ（A21）、sinusoidal 位置（A1）、bf16 混合精度（A22）、SymTTR 选 checkpoint、MRP 独立校准集、8 任务 per-task fewshot、--skip-eval、加载器读 `config.sgt` | **VERIFIED** | `results/gate_c1_conformance.json`、`results/gate_m7_ablation.json`、`results/gate_m8a_utility.json` |
-| C42 | Table 1 Utility 列 + §7.2 | SGT 在几乎不损失 Utility 的前提下取得 NN-FR 81–93% | 关闭全部 GAP 后的系统性搜索（有界 µ∈{0.02,0.05,0.1,1.0}/元素、α_acs∈{10,200}、300–2000 步、宽 2048、sinusoidal、bf16）：**任何 NN-FR≥3% 的设置 Utility 都 ≈ −21pp**；NN-FR 76.67/80.44 时 Utility −21.27/−21.70pp；σ=0.01 常数噪声（Utility −1.67pp）时 NN-FR=0 | **BLOCKED**（本机预算下不可达；量化见 `docs/CONFORMANCE.md` §6.1、报告 §4.6） | `/tmp`→ 已归档为 `results/conformance_sweep.json`；`results/utility_baseline_l50.json` |
+| C42 | Table 1 Utility 列 + §7.2 | SGT 在几乎不损失 Utility 的前提下取得 NN-FR 81–93% | 逐行对齐后正式重跑 6 行（20k 条/800 步/宽 2048/有界 µσ/sinusoidal/SymTTR 选模）：**含 AbsCos 的三行混淆度量接近论文**（NN-FR 87.3–91.4 vs 81.2–94.9、SymTTR-10 72.1–82.4），但 **Utility = −24.4…−28.0pp**（论文 −0.01…−2.44pp）；另三行几乎不产生混淆（NN-FR 0.13–0.87 vs 34.4–100） | **BLOCKED**（机制可复现、效用-隐私权衡不可复现；量化见 `results/table1_reproduction.json`） | `results/table1_reproduction.json`、`results/utility8_*.json` |
+
+| C43 | Table 1 Comp.Entr. 行 | 只训 Eq (12) 的 SGT 在 MI=22.19 时 NN-FR=88.41 | 本仓库按 Eq (12)（有界 σ）训练 800 步：NN-FR 0.87、MI 1.31、PAC 14.68；且 $L^{CGE}$ 对 µ 的梯度恒 0（M2 c-cge-no-mean），µ 无法被该损失推动 | **FALSIFIED**（该行与 Eq (12) 的数学性质矛盾，F35） | `results/ablation_comp_entropy.json`；F35 |
 
 ## 判定口径
 

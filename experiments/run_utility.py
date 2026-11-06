@@ -32,6 +32,9 @@ GAP-6（论文 §7 / CONFORMANCE CF-31）：
   ``error`` 直接非零退出（旧行为）；``skip`` 把该任务记为
   ``{"status": "skipped_too_long", "max_len": ...}`` 写进 JSON 而不中断其它任务。
   ``skip`` 模式下分组调用若因超长失败，会退化为逐任务调用以定位超长任务。
+  长度守卫只对 ``pos_encoding="learned"`` 安装：``sinusoidal`` / ``none`` 是 A1 的长度
+  泛化选择，前向对任意 T 有效，``max_len`` 只是元数据，不能据此判超长（否则 HellaSwag
+  10-shot 等长 prompt 会被误跳过）；实际是否安装记在 ``meta.max_len_guard``。
 - ``meta.num_fewshot`` 记录每个任务**实际请求**的 shot；lm-eval 自己的 ``n-shot`` 原样保留。
 
 结果 JSON 结构::
@@ -41,7 +44,10 @@ GAP-6（论文 §7 / CONFORMANCE CF-31）：
 
 ``results`` 存合并后的 ``simple_evaluate(...)["results"]``（lm-eval 0.4.13 的键名为
 ``acc,none`` / ``acc_norm,none``；group 任务如 ``mmlu`` 另含 group 聚合项）；超长被跳过的
-任务以 ``skipped_too_long`` 条目出现。``meta`` 记录版本、样本数、每任务 shot、SGT 架构等。
+任务以 ``skipped_too_long`` 条目出现。``meta`` 记录版本、样本数、每任务 shot、SGT 架构、
+SGT 实际选项（``meta.sgt_options``：``pos_encoding`` / ``final_norm`` / ``mu_scale`` /
+``sigma_floor`` / ``sigma_max``）以及长度守卫是否安装（``meta.max_len_guard``，只有
+``pos_encoding="learned"`` 才安装）。
 所有非有限浮点（NaN/Inf）写为 ``null``，保证 JSON 可被严格解析。
 """
 
@@ -243,14 +249,51 @@ def is_too_long_error(exc: BaseException) -> bool:
 # --------------------------------------------------------------------------- #
 # GAP-6：SGT 长度守卫 + 结果合并 + 分组评测
 # --------------------------------------------------------------------------- #
-def _install_max_len_guard(wrapper, max_len: int):
+#: 受 ``max_len`` 约束的 ``pos_encoding``：只有可学习绝对位置编码有 T 上限；
+#: ``sinusoidal`` / ``none`` 按序列长度动态计算（A1 长度泛化），对任意 T 有效。
+_GUARDED_POS_ENCODINGS = frozenset({"learned"})
+#: :class:`~sgt.model.SGTModel` 支持的位置编码（非法值必须报错，不能静默不装守卫）。
+_KNOWN_POS_ENCODINGS = frozenset({"learned", "sinusoidal", "none"})
+
+
+def _install_max_len_guard(wrapper, max_len: int, pos_encoding: str = "learned"):
     """在已安装的 SGT embedding wrapper 入口加长度检查，超限抛 :class:`SGTMaxLenExceeded`。
 
-    只在实例上包一层 ``forward``（不改 ``src/sgt/utility.py``，该模块保持原语义）；T 不超过
-    ``max_len`` 时与原实现逐位相同，且在进入 SGT 前就失败（避免超长 prompt 白算一次）。
+    守卫只对 ``pos_encoding="learned"`` 安装：可学习绝对位置编码只有 ``max_len`` 行，
+    ``T > max_len`` 时 :class:`~sgt.model.SGTModel` 本身就会失败。``sinusoidal`` / ``none``
+    是 A1 的长度泛化选择，前向对任意 T 有效（``max_len`` 只是元数据），此时**不安装守卫**
+    ——否则 HellaSwag 10-shot（prompt 最长 ~971 token）这类合法长输入会被误判成超长。
+
+    守卫只在实例上包一层 ``forward``（不改 ``src/sgt/utility.py``，该模块保持原语义）；
+    T 不超过 ``max_len`` 时与原实现逐位相同，且在进入 SGT 前就失败（避免超长 prompt 白算
+    一次）。
+
+    Args:
+        wrapper: ``install_sgt_embedding`` 返回的 embedding wrapper。
+        max_len: SGT 的 ``max_len``（``pos_encoding != "learned"`` 时不再校验为正整数，
+            因为它只是元数据）。
+        pos_encoding: SGT 实际使用的位置编码（``learned`` / ``sinusoidal`` / ``none``）。
+            默认 ``"learned"`` 保持旧行为（不传时按需要守卫处理）。
+
+    Returns:
+        ``(wrapper, meta)``；``meta`` 为 ``{"installed": bool, "pos_encoding": ...}``，
+        安装时另有 ``"max_len"``，未安装时另有 ``"reason"``（写进结果 JSON 的
+        ``meta.max_len_guard``）。未安装时 wrapper 原样返回、``forward`` 不被包装。
     """
     if not hasattr(wrapper, "forward"):
         raise TypeError(f"wrapper 必须有 forward，实际 {type(wrapper)!r}")
+    pos_encoding = str(pos_encoding)
+    if pos_encoding not in _KNOWN_POS_ENCODINGS:
+        raise ValueError(
+            f"pos_encoding 必须为 {sorted(_KNOWN_POS_ENCODINGS)} 之一，实际 {pos_encoding!r}"
+        )
+    if pos_encoding not in _GUARDED_POS_ENCODINGS:
+        # 长度无关的位置编码：T 任意有效，安装守卫会误伤合法长 prompt。
+        return wrapper, {
+            "installed": False,
+            "pos_encoding": pos_encoding,
+            "reason": f"pos_encoding={pos_encoding}",
+        }
     max_len = _positive_int(max_len, "sgt.max_len")
     original_forward = wrapper.forward
 
@@ -268,7 +311,11 @@ def _install_max_len_guard(wrapper, max_len: int):
         return original_forward(ids, *fargs, **fkwargs)
 
     wrapper.forward = guarded_forward
-    return wrapper
+    return wrapper, {
+        "installed": True,
+        "pos_encoding": pos_encoding,
+        "max_len": max_len,
+    }
 
 
 def merge_eval_results(parts: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -558,9 +605,11 @@ def main(argv: list[str] | None = None) -> int:
     # ---- SGT 预加载：在跑 harness 之前暴露 ckpt 损坏 / d 与模型不符等问题 --- #
     sgt_template = None
     sgt_max_len: int | None = None
+    sgt_meta: dict[str, Any] | None = None
+    sgt_options: dict[str, Any] | None = None
     if args.sgt_ckpt is not None:
         try:
-            sgt_template = load_sgt_for_lm(
+            sgt_template, sgt_meta = load_sgt_for_lm(
                 args.model,
                 args.sgt_ckpt,
                 device="cpu",
@@ -568,15 +617,25 @@ def main(argv: list[str] | None = None) -> int:
                 n_layers=args.sgt_layers,
                 n_heads=args.sgt_heads,
                 sigma_init=args.sgt_sigma_init,
+                return_meta=True,
             )
             sgt_template.float()  # 统一 fp32；wrapper 会把 base 的 bf16/fp16 转换后转回
             sgt_max_len = int(sgt_template.max_len)
+            # 从加载器 meta 取实际生效的选项（无参数但改变前向行为，必须可追溯）。
+            sgt_options = {
+                key: sgt_meta[key]
+                for key in ("pos_encoding", "final_norm", "mu_scale", "sigma_floor", "sigma_max")
+            }
+            sgt_options["pos_encoding_source"] = sgt_meta["pos_encoding_source"]
+            sgt_options["inferred_unparameterized_options"] = sgt_meta[
+                "inferred_unparameterized_options"
+            ]
         except Exception as exc:
             print(f"[run_utility] ERROR: 加载 SGT checkpoint 失败: {exc}", file=sys.stderr)
             traceback.print_exc()
             return 1
 
-    injection = {"count": 0, "info": None}
+    injection = {"count": 0, "info": None, "guard": None}
     original_from_pretrained = transformers.AutoModelForCausalLM.from_pretrained
 
     def patched_from_pretrained(*fargs, **fkwargs):
@@ -586,8 +645,12 @@ def main(argv: list[str] | None = None) -> int:
         try:
             sgt = copy.deepcopy(sgt_template)
             wrapper = install_sgt_embedding(model, sgt, seed=args.sgt_seed)
-            # GAP-6：超长输入在进入 SGT 前抛 SGTMaxLenExceeded（error/skip 共用同一判据）。
-            _install_max_len_guard(wrapper, sgt.max_len)
+            # GAP-6：learned 位置编码的超长输入在进入 SGT 前抛 SGTMaxLenExceeded
+            # （error/skip 共用同一判据）；sinusoidal/none 长度无关，不安装守卫。
+            wrapper, guard_meta = _install_max_len_guard(
+                wrapper, sgt.max_len, sgt.pos_encoding
+            )
+            injection["guard"] = guard_meta
         except Exception as exc:
             # 必须显式失败：静默返回未注入的模型会污染 Utility 结论。
             raise RuntimeError(
@@ -684,6 +747,9 @@ def main(argv: list[str] | None = None) -> int:
             "calls": outcome["calls"],
             "max_len_fallback": fallback,
             "sgt_max_len": sgt_max_len,
+            # SGT 实际生效的选项（来自加载器 meta）与长度守卫是否安装（learned 才装）。
+            "sgt_options": sgt_options,
+            "max_len_guard": injection["guard"],
             "skipped": skipped,
             "n_samples": merged.get("n-samples"),
             "versions": merged.get("versions"),
@@ -710,7 +776,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[run_utility] done: tag={tag} tasks={tasks} limit={limit} "
         f"fewshot={shots} calls={len(outcome['calls'])} "
-        f"skipped={skipped_names or 'none'} fallback={fallback} "
+        f"skipped={skipped_names} fallback={fallback} "
         f"device={args.device} sgt={'yes' if args.sgt_ckpt else 'no'} "
         f"duration={duration:.1f}s -> {out_path}"
     )

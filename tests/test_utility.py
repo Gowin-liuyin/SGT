@@ -1047,3 +1047,48 @@ def test_load_sgt_for_lm_rebuilds_all_config_sgt_options(tmp_path: Path) -> None
         mu, log_sigma2 = loaded(x)
     assert torch.equal(mu, ref_mu)
     assert torch.equal(log_sigma2, ref_log_sigma2)
+
+
+# --------------------------------------------------------------------------- #
+# 15. 长度守卫只对 learned 位置编码生效（sinusoidal 是长度泛化选择）
+# --------------------------------------------------------------------------- #
+def test_15_max_len_guard_only_applies_to_learned_pos_encoding() -> None:
+    """``pos_encoding != "learned"`` 时 SGT 前向对任意 T 有效，守卫不得误判超长。
+
+    真实场景：sinusoidal SGT（``max_len`` 只是元数据）跑 HellaSwag 10-shot，prompt
+    最长 ~971 token，被旧的 ``max_len`` 守卫误记为 ``skipped_too_long``。
+    """
+    max_len = 4
+    torch.manual_seed(0)
+    sinusoidal = SGTModel(
+        8, hidden=8, n_layers=1, n_heads=2, max_len=max_len, pos_encoding="sinusoidal"
+    ).eval()
+    wrapper = SGTEmbedding(_base_embedding(), sinusoidal, seed=0)
+    assert wrapper.sgt.pos_encoding == "sinusoidal"
+
+    guarded, meta = U._install_max_len_guard(wrapper, max_len, "sinusoidal")
+    assert meta["installed"] is False
+    assert meta["reason"] == "pos_encoding=sinusoidal"
+    # 未安装守卫：wrapper 原样返回，forward 不被包装（实例 __dict__ 里没有 forward）。
+    assert guarded is wrapper
+    assert "forward" not in wrapper.__dict__
+    long_ids = _ids(batch=1, seq_len=32)
+    with torch.no_grad():
+        out = guarded(long_ids)
+    assert out.shape == (1, 32, D)
+
+    # learned：max_len 是硬上限，T > max_len 必须抛哨兵。
+    torch.manual_seed(0)
+    learned = SGTModel(8, hidden=8, n_layers=1, n_heads=2, max_len=max_len).eval()
+    assert learned.pos_encoding == "learned"
+    guarded_learned, learned_meta = U._install_max_len_guard(
+        SGTEmbedding(_base_embedding(), learned, seed=0), max_len, "learned"
+    )
+    assert learned_meta["installed"] is True
+    assert learned_meta["max_len"] == max_len
+    assert "forward" in guarded_learned.__dict__
+    with pytest.raises(U.SGTMaxLenExceeded) as excinfo:
+        guarded_learned(_ids(batch=1, seq_len=8))
+    assert excinfo.value.max_len == max_len
+    assert excinfo.value.observed_len == 8
+    assert U.is_too_long_error(excinfo.value)

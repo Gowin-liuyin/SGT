@@ -1,0 +1,165 @@
+{
+ "protocol": {
+  "target_model": "Llama-3.2-1B-Instruct (unsloth mirror)",
+  "train_examples": 20000,
+  "steps": 800,
+  "batch_size": 1,
+  "seq_len": 256,
+  "lr": 0.001,
+  "lm_dtype": "bfloat16",
+  "sgt_hidden": 2048,
+  "n_layers": 2,
+  "n_heads": 8,
+  "mu_scale": 0.1,
+  "sigma_range": [
+   0.005,
+   0.05
+  ],
+  "sigma_init": 0.01,
+  "pos_encoding": "sinusoidal",
+  "final_norm": true,
+  "alpha": {
+   "mi": 0.00048828125,
+   "acs": 200.0,
+   "mnp": 200.0
+  },
+  "selection": "SymTTR-100 every 50 steps",
+  "eval_tokens": 2000,
+  "mrp_r_star": "独立校准集(25%)",
+  "utility": "8 tasks × limit 10（MMLU 570 条=57×10；HellaSwag 10-shot）；metric=acc（ifeval=prompt_level_strict_acc）"
+ },
+ "rows": {
+  "comp_entropy": {
+   "repro": {
+    "utility_pp": -27.97,
+    "nn_fr": 0.87,
+    "mrp_fr": 0.87,
+    "symttr_10": 0.07,
+    "symttr_100": 0.0,
+    "hist_entropy_pct": 0.48,
+    "mi": 1.31,
+    "pac_adv": 14.68
+   },
+   "paper": {
+    "utility": -13.84,
+    "nn_fr": 88.41,
+    "mrp_fr": 88.41,
+    "symttr_10": 75.99,
+    "symttr_100": 49.75,
+    "hist_entropy": 58.6,
+    "mi": 22.19,
+    "pac": 100.0
+   }
+  },
+  "cossim": {
+   "repro": {
+    "utility_pp": -24.41,
+    "nn_fr": 0.13,
+    "mrp_fr": 0.13,
+    "symttr_10": 0.0,
+    "symttr_100": 0.0,
+    "hist_entropy_pct": 0.09,
+    "mi": 21.85,
+    "pac_adv": 100.0
+   },
+   "paper": {
+    "utility": -5.49,
+    "nn_fr": 99.98,
+    "mrp_fr": 3.21,
+    "symttr_10": 1.43,
+    "symttr_100": 1.07,
+    "hist_entropy": 2.47,
+    "mi": 3.2e+19,
+    "pac": 100.0
+   }
+  },
+  "abscos": {
+   "repro": {
+    "utility_pp": -27.97,
+    "nn_fr": 91.4,
+    "mrp_fr": 91.4,
+    "symttr_10": 82.4,
+    "symttr_100": 73.0,
+    "hist_entropy_pct": 55.49,
+    "mi": 4.52,
+    "pac_adv": 44.23
+   },
+   "paper": {
+    "utility": -0.01,
+    "nn_fr": 94.9,
+    "mrp_fr": 94.9,
+    "symttr_10": 93.36,
+    "symttr_100": 92.86,
+    "hist_entropy": 87.62,
+    "mi": 6000000000.0,
+    "pac": 100.0
+   }
+  },
+  "mi": {
+   "repro": {
+    "utility_pp": -19.91,
+    "nn_fr": 0.4,
+    "mrp_fr": 0.4,
+    "symttr_10": 0.0,
+    "symttr_100": 0.0,
+    "hist_entropy_pct": 0.24,
+    "mi": 19.63,
+    "pac_adv": 100.0
+   },
+   "paper": {
+    "utility": -0.72,
+    "nn_fr": 34.43,
+    "mrp_fr": 34.43,
+    "symttr_10": 18.96,
+    "symttr_100": 17.39,
+    "hist_entropy": 23.96,
+    "mi": 1.48,
+    "pac": 16.39
+   }
+  },
+  "mi_abscos": {
+   "repro": {
+    "utility_pp": -24.48,
+    "nn_fr": 87.93,
+    "mrp_fr": 87.93,
+    "symttr_10": 80.53,
+    "symttr_100": 73.27,
+    "hist_entropy_pct": 54.52,
+    "mi": 7.19,
+    "pac_adv": 66.56
+   },
+   "paper": {
+    "utility": -2.44,
+    "nn_fr": 81.23,
+    "mrp_fr": 81.23,
+    "symttr_10": 71.36,
+    "symttr_100": 66.88,
+    "hist_entropy": 75.72,
+    "mi": 1.91,
+    "pac": 20.56
+   }
+  },
+  "mi_abscos_norm": {
+   "repro": {
+    "utility_pp": -26.98,
+    "nn_fr": 87.27,
+    "mrp_fr": 87.27,
+    "symttr_10": 72.07,
+    "symttr_100": 61.33,
+    "hist_entropy_pct": 50.48,
+    "mi": 19.49,
+    "pac_adv": 100.0
+   },
+   "paper": {
+    "utility": -1.97,
+    "nn_fr": 93.0,
+    "mrp_fr": 93.0,
+    "symttr_10": 90.42,
+    "symttr_100": 88.15,
+    "hist_entropy": 91.9,
+    "mi": 1.11,
+    "pac": 12.69
+   }
+  }
+ }
+}
