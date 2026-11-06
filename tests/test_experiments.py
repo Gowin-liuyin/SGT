@@ -559,7 +559,7 @@ def test_ablation_config_gap5_values():
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert raw["data"]["max_examples"] == 20000
     assert raw["data"]["frac"] == 0.15  # 论文协议（只作记录）
-    assert raw["train"]["steps"] == 2000
+    assert raw["train"]["steps"] == 800
     assert raw["train"]["batch_size"] == 1
     assert raw["train"]["max_len"] == 256
     assert raw["train"]["lr"] == pytest.approx(1.0e-3)
@@ -906,7 +906,7 @@ def test_sgt_structural_options_wired_from_yaml(monkeypatch):
     )["sgt"]
     expected_from_yaml = {
         "final_norm": True,
-        "mu_scale": pytest.approx(1.0),
+        "mu_scale": pytest.approx(0.1),
         "sigma_floor": pytest.approx(0.005),
         "pos_encoding": "sinusoidal",
     }
