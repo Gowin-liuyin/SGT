@@ -1,10 +1,10 @@
 # 复现状态（会话恢复用）
 
-更新时间: 2026-11-05 21:45 (Asia/Shanghai)
+更新时间: 2026-11-06 14:35 (Asia/Shanghai)
 论文: Learning Obfuscations Of LLM Embedding Sequences: Stained Glass Transform (arXiv:2506.09452v1)
 论文源: `2506.09452v1.pdf`；代码源: 无官方实现（原仓库为空），本仓库即复现实现
-当前阶段: Phase R（报告完成，门禁回归）
-当前目标: M10 全绿 + commit/push
+当前阶段: Phase R 完成（逐行一致性 + 正式重跑 + 判定）
+当前目标: 已达成——C1 审计闭合、6 行 Table 1 重跑、结论落地
 
 | 模块 | 依赖 | 状态 | 门禁证据 | 备注 |
 |---|---|---|---|---|
@@ -40,8 +40,17 @@
 - `pytest`：106 passed / 3 xfailed。
 - 远端仓库已推送（`origin/main`，历史已清理掉误入库的 .venv-lm，仓库 1.2MB）。
 
+**本轮（2026-11-06）结论**
+- CONFORMANCE：CF-01..CF-36 + GAP-1..GAP-10 全 CLOSED；`gate_c1_conformance` PASS。
+- 正式重跑（20k 条/800 步/宽 2048/有界 µσ/sinusoidal/SymTTR 选模/8 任务 limit 10）：`results/table1_reproduction.json`。
+  - 含 AbsCos 的三行**混淆度量接近论文**（NN-FR 87.3–91.4 vs 81.2–94.9；SymTTR-10 72.1–82.4 vs 71.4–93.4）；
+  - 但 **Utility = −24.4…−28.0pp**（论文 −0.01…−2.44pp）；
+  - Comp.Entr./CosSim/MI 单损失几乎不产生混淆（NN-FR 0.13–0.87 vs 34.4–100），其中 Comp.Entr. 与 Eq (12) 的“µ 梯度恒 0”矛盾（F35/C43）。
+- 判定：**机制层复现（Eq 9/8 的混淆）+ 协议/指标层复现成功；论文核心的“保效用隐私”未复现（C42 BLOCKED）**。
+
 **下一动作**
-1. 如需更高复现度：用论文级预算重训（F32），或在 A100 集群上执行 `experiments/run_large_models.py` 生成的 `torchrun` 命令（D4）。
+1. 若能拿到作者超参或 A100 集群：按 `configs/ablation.yaml` 直接重跑 6 行（C42 的判定需要论文级预算才能从 BLOCKED 变为结论）。
+2. 其它保持现状；无待修门禁。
 3. 若要继续提高复现度：按论文级预算重训（更多步数/数据）→ Table 1 的 Utility 列（F32）；有 A100 集群时跑 M9 脚本。
 
 **阻塞项**
