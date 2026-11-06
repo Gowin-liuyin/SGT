@@ -1,5 +1,9 @@
 """M3 `SGTModel` 的验证：API/形状、初始化、确定性、序列与位置依赖、padding 不变性、
-梯度、序列化往返、Eq (1) 采样、`sigma_min` 下限（M3 任务单 1–10）。
+梯度、序列化往返、Eq (1) 采样、`sigma_min` 下限（M3 任务单 1–10），以及审计 GAP-1/GAP-3：
+宽度 2048 可前向（A1）、`sigma_max` 有界参数化（A21）；以及数值稳定 / 长度泛化的三个
+声明性选项：`mu_scale`（A21，µ 有界）、`sigma_floor`（A21，Σθ 下界）、
+`pos_encoding="sinusoidal"/"none"`（A1，长度泛化），及其与 `final_norm`/`sigma_max`/
+零初始化头的组合（test_16–test_20）。
 
 说明（为何部分测试要先改写输出头）：
 任务单要求输出头**零初始化**，因此模型刚构造时 `mu ≡ 0`、`sigma ≡ sigma_init`，前向
@@ -413,3 +417,414 @@ def test_12_dtype_contract():
     # 不做隐式降精度：fp64 输入配 fp32 参数直接报错，提示先 model.double()。
     with pytest.raises(ValueError, match="dtype"):
         model32(x64)
+
+
+# --------------------------------------------------------------------------- #
+# 13. GAP-3 / A21：sigma_max 有界参数化（Eq (12) 行所必需）
+# --------------------------------------------------------------------------- #
+def test_13_sigma_max_clamps_forward_and_sample():
+    """人为把 log_sigma2 头 bias 设为 log(1.0)（原始 σ=1），sigma_max=0.05 必须生效。
+
+    同时验证 `sample()` 使用的 σ 正是 forward 返回（夹过）的 σ —— 否则损失 / 评测看
+    到的 σ 与采样不一致。
+    """
+    model = _model(sigma_max=0.05)
+    with torch.no_grad():
+        model.head.bias[D:].fill_(math.log(1.0))  # 原始 σ ≡ 1 ≫ sigma_max
+    # 前提：未夹时的原始 σ 确实超过上界（否则该测试不能证明 clamp 生效）。
+    raw_sigma = torch.exp(0.5 * model.head.bias[D:])
+    assert (raw_sigma > 0.05 + 1e-3).all()
+
+    x = _rand((2, T, D), 30)
+    u = _rand((2, T, D), 31)
+    with torch.no_grad():
+        mu, log_sigma2 = model(x)
+        sigma = torch.exp(0.5 * log_sigma2)
+        out = model.sample(x, u=u)
+
+    # forward 返回的 log_sigma2 已被夹到 log(sigma_max²)，σ ≤ sigma_max（1e-6 容差）。
+    assert (log_sigma2 <= model.log_sigma_max2 + 1e-6).all()
+    assert torch.allclose(sigma, torch.full_like(sigma, 0.05), atol=1e-6)
+    assert (sigma <= 0.05 + 1e-6).all()
+
+    # sample() 与 x + mu + σ·u 逐位一致，且 σ 用的是返回的（夹过的）值。
+    assert torch.allclose(out, x + mu + sigma * u, atol=1e-12)
+    # 用输出反解 σ（u 取非零）：必须 ≤ sigma_max + 1e-6，而非原始 σ=1。
+    # 容差依据：float32 下 (x + mu + σu) - x - mu 的相消误差 ~1e-7/|u|，取 |u|>0.1 ⇒ ~1e-6，
+    # 故用 atol=1e-5 判“等于上界”。
+    mask_u = u.abs() > 0.1
+    sigma_eff = (out - x - mu)[mask_u] / u[mask_u]
+    assert (sigma_eff <= 0.05 + 1e-6).all()
+    assert torch.allclose(sigma_eff, torch.full_like(sigma_eff, 0.05), atol=1e-5)
+
+    # 上界只在超出时生效：sigma_init=1 且 sigma_max=2 时 σ 仍为 1。
+    loose = _model(sigma_max=2.0)
+    with torch.no_grad():
+        _, lv_loose = loose(x)
+    assert torch.allclose(torch.exp(0.5 * lv_loose), torch.ones(2, T, D), atol=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# 14. sigma_max=None：保持论文 Def 3.1 的无界定义
+# --------------------------------------------------------------------------- #
+def test_14_sigma_max_none_is_unbounded():
+    model = _model(sigma_max=None)
+    assert model.sigma_max is None and model.log_sigma_max2 is None
+    with torch.no_grad():
+        model.head.bias[D:].fill_(math.log(1.0))
+    x = _rand((2, T, D), 32)
+    with torch.no_grad():
+        _mu, log_sigma2 = model(x)
+    sigma = torch.exp(0.5 * log_sigma2)
+    assert torch.allclose(sigma, torch.ones_like(sigma), atol=1e-6)
+    # 同一构造在 sigma_max=0.05 下会被夹到 0.05 → 默认行为确实是无界的。
+    bounded = _model(sigma_max=0.05)
+    with torch.no_grad():
+        bounded.head.bias[D:].fill_(math.log(1.0))
+        _, lv_bounded = bounded(x)
+    assert (torch.exp(0.5 * lv_bounded) <= 0.05 + 1e-6).all()
+
+    # 参数非法必须快速失败（sigma_max 必须 > sigma_min 且有限）。
+    for bad in (1e-6, 1e-9, 0.0, -1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="sigma_max"):
+            _model(sigma_max=bad)
+
+
+# --------------------------------------------------------------------------- #
+# 15. GAP-1 / A1：宽度可配（hidden=2048, n_heads=8 必须可前向）
+# --------------------------------------------------------------------------- #
+def test_15_hidden_2048_forward():
+    d, t, b = 2048, 4, 1
+    torch.manual_seed(0)
+    model = SGTModel(d, hidden=2048, n_layers=2, n_heads=8, max_len=8)
+    x = torch.randn(b, t, d)
+    mask = torch.ones(b, t, dtype=torch.bool)
+    with torch.no_grad():
+        mu, log_sigma2 = model(x, attention_mask=mask)
+    assert mu.shape == (b, t, d) and log_sigma2.shape == (b, t, d)
+    sigma = torch.exp(0.5 * log_sigma2)
+    assert torch.isfinite(mu).all() and torch.isfinite(sigma).all() and (sigma > 0).all()
+    # 结构：宽度 2048 真的被用上（不是静默回退到默认 512）。
+    assert model.input_proj.weight.shape == (2048, d)
+    assert model.head.weight.shape == (2 * d, 2048)
+
+    # n_heads 必须整除 hidden（A1 的可配置前提）。
+    with pytest.raises(ValueError, match="整除"):
+        SGTModel(8, hidden=16, n_heads=3)
+
+
+# --------------------------------------------------------------------------- #
+# A21（µθ 有界）/ A21（Σθ 下界）/ A1（位置编码与长度泛化）辅助
+# --------------------------------------------------------------------------- #
+def _fill_head_weights(model: SGTModel, seed: int = 1234, scale: float = 0.2) -> None:
+    """给零初始化的输出头注入固定随机权重（模拟训练后状态；见模块 docstring）。"""
+    g = torch.Generator().manual_seed(seed)
+    with torch.no_grad():
+        model.head.weight.copy_(
+            torch.randn(model.head.weight.shape, generator=g) * scale
+        )
+    model.eval()
+
+
+# --------------------------------------------------------------------------- #
+# 16. A21：mu_scale 有界参数化（Eq (9) 的 |cos| 对 µ 尺度不变 ⇒ 无界头发散）
+# --------------------------------------------------------------------------- #
+def test_16_mu_scale_bounds_mu():
+    x_seeds = (0, 1, 2, 3, 4, 5)
+    # (a) mu_scale=1.0：随机权重 + 多次前向，|mu| 严格 < 1。
+    #     同一组权重在 mu_scale=None 下的原始 |mu| 确实 > 1（否则 clamp 未真正生效，
+    #     测试就没有意义）。
+    for head_seed in (1234, 4321, 999):
+        raw = _model()  # mu_scale 默认 None
+        _fill_head_weights(raw, seed=head_seed, scale=0.2)
+        bounded = _model(mu_scale=1.0)
+        bounded.load_state_dict(raw.state_dict())
+        bounded.eval()
+
+        raw_max = 0.0
+        bounded_max = 0.0
+        with torch.no_grad():
+            for seed in x_seeds:
+                x = _rand((B, T, D), seed)
+                raw_max = max(raw_max, raw(x)[0].abs().max().item())
+                bounded_max = max(bounded_max, bounded(x)[0].abs().max().item())
+        assert raw_max > 1.0, f"head_seed={head_seed}: 构造失败，原始 |µ| 未超过 1"
+        assert bounded_max < 1.0, (
+            f"head_seed={head_seed}: mu_scale=1.0 下 |µ|={bounded_max:.6f} 未严格 < 1"
+        )
+
+    # (b) 有界值就是 M·tanh(raw/M)（逐元素）：同权重两份模型逐值比对。
+    unbounded = _model()
+    _fill_head_weights(unbounded, seed=1234, scale=0.2)
+    phi = _model(mu_scale=1.0)
+    phi.load_state_dict(unbounded.state_dict())
+    phi.eval()
+    x = _rand((B, T, D), 40)
+    with torch.no_grad():
+        mu_raw, _ = unbounded(x)
+        mu_phi, _ = phi(x)
+    assert torch.allclose(mu_phi, torch.tanh(mu_raw), atol=1e-7)
+    # 大 M 时 tanh 近似恒等：mu_scale=1e3 时与原始值几乎一致（不改变 Eq (1) 的形式）。
+    # 容差 2e-5：M·tanh(raw/M) = raw - raw³/(3M²) + O(raw⁵/M⁴)，|raw|≤3 时截断误差
+    # ~9e-6，加上 float32 舍入（实测最大 7.6e-6）。
+    loose = _model(mu_scale=1e3)
+    loose.load_state_dict(unbounded.state_dict())
+    with torch.no_grad():
+        mu_loose, _ = loose(x)
+    assert torch.allclose(mu_loose, mu_raw, atol=2e-5)
+
+    # (c) mu_scale=None 时确实无此限制：头权重放大 10× 后 |µ| 远超 1。
+    scaled = _model()
+    _fill_head_weights(scaled, seed=1234, scale=0.2)
+    with torch.no_grad():
+        scaled.head.weight.mul_(10.0)
+    with torch.no_grad():
+        mu_scaled, _ = scaled(x)
+    assert mu_scaled.abs().max().item() > 1.0, "mu_scale=None 时不应有上界"
+    # 同权重 + mu_scale=1.0：仍不超过 1。用 <=（非严格）：float32 下 tanh 在
+    # |raw/mu_scale| ≳ 9 时饱和到 ±1，返回值可能恰为 ±M（浮点极限，见模块 docstring）。
+    clamped = _model(mu_scale=1.0)
+    clamped.load_state_dict(scaled.state_dict())
+    with torch.no_grad():
+        mu_clamped, _ = clamped(x)
+    assert (mu_clamped.abs() <= 1.0).all()
+
+    # (d) 校验：mu_scale 必须为正的有限值。
+    for bad in (0.0, -1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="mu_scale"):
+            _model(mu_scale=bad)
+
+
+# --------------------------------------------------------------------------- #
+# 17. A21：sigma_floor 下界（Eq (12) 的 -log|Σ| 与 Eq (9) 的 |cos| 都会把 σ 推向 0）
+# --------------------------------------------------------------------------- #
+def test_17_sigma_floor_clamps_forward_and_sample():
+    model = _model(sigma_floor=0.005, sigma_max=0.02)
+    with torch.no_grad():
+        model.head.bias[D:].fill_(-50.0)  # 原始 σ = exp(-25) ≈ 1.4e-11 ≪ 0.005
+    # 前提：未夹时原始 σ 确实低于下限（否则该测试不能证明 clamp 生效）。
+    raw_sigma = torch.exp(0.5 * model.head.bias[D:])
+    assert (raw_sigma < 0.005).all()
+
+    x = _rand((2, T, D), 41)
+    u = _rand((2, T, D), 42)
+    with torch.no_grad():
+        mu, log_sigma2 = model(x)
+        sigma = torch.exp(0.5 * log_sigma2)
+        out = model.sample(x, u=u)
+    # 任务单容差：σ ∈ [floor - 1e-9, sigma_max + 1e-9]（float32 下 exp(log(f²)) 有
+    # ~1e-10 的舍入误差，实测 0.004999999888）。
+    assert (sigma >= 0.005 - 1e-9).all(), "σ 低于 sigma_floor"
+    assert (sigma <= 0.02 + 1e-9).all(), "σ 高于 sigma_max"
+    # σ 正好停在下限（不是仅仅落进区间），且 forward 返回的就是夹过的值。
+    assert torch.allclose(sigma, torch.full_like(sigma, 0.005), atol=1e-9)
+    assert (log_sigma2 >= model.log_sigma_floor2 - 1e-9).all()
+    # sample() 与损失/评测共用同一 σ：x̃ = x + mu + σ·u 逐位一致。
+    assert torch.allclose(out, x + mu + sigma * u, atol=1e-12)
+
+    # 默认 sigma_floor=None：不施加下界，返回原始（可塌缩的）σ。
+    plain = _model()
+    with torch.no_grad():
+        plain.head.bias[D:].fill_(-50.0)
+    with torch.no_grad():
+        _, lv_plain = plain(x)
+    assert (torch.exp(0.5 * lv_plain) < 0.005).all(), "默认行为不应有下界"
+
+    # 区间内不夹：sigma_init=0.01 ∈ [0.005, 0.02] 时 σ 保持 0.01。
+    in_range = _model(sigma_init=0.01, sigma_floor=0.005, sigma_max=0.02)
+    with torch.no_grad():
+        _, lv_in = in_range(x)
+    assert torch.allclose(
+        torch.exp(0.5 * lv_in), torch.full((2, T, D), 0.01), atol=1e-6
+    )
+
+    # 上界仍生效（与下界对称）：bias 设大时 σ 停在 sigma_max。
+    high = _model(sigma_floor=0.005, sigma_max=0.02)
+    with torch.no_grad():
+        high.head.bias[D:].fill_(50.0)
+    with torch.no_grad():
+        _, lv_high = high(x)
+    sigma_high = torch.exp(0.5 * lv_high)
+    assert (sigma_high <= 0.02 + 1e-9).all()
+    assert torch.allclose(sigma_high, torch.full_like(sigma_high, 0.02), atol=1e-9)
+
+    # 校验：正有限值，且 sigma_min <= sigma_floor <= sigma_max。
+    for bad in (0.0, -1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="sigma_floor"):
+            _model(sigma_floor=bad)
+    with pytest.raises(ValueError, match="sigma_min"):
+        _model(sigma_floor=1e-9)  # 低于 sigma_min=1e-6
+    with pytest.raises(ValueError, match="sigma_floor"):
+        _model(sigma_floor=0.05, sigma_max=0.02)  # 高于 sigma_max
+    # 边界合法：== sigma_min、== sigma_max、以及 sigma_max=None 时只校验 >= sigma_min。
+    _model(sigma_floor=1e-6)
+    _model(sigma_floor=0.02, sigma_max=0.02)
+    _model(sigma_floor=0.02)
+
+
+# --------------------------------------------------------------------------- #
+# 18. A1：sinusoidal 位置编码（无参数、按 T 动态生成、长度泛化）
+# --------------------------------------------------------------------------- #
+def test_18_pos_encoding_sinusoidal_length_generalization():
+    max_len = 8
+    model = _trained_like(seed=21, max_len=max_len, pos_encoding="sinusoidal")
+    learned = _model(max_len=max_len, pos_encoding="learned")
+    # 无参数：pos_emb 不存在，参数集合恰为 learned 去掉 pos_emb.weight。
+    assert model.pos_emb is None
+    assert set(dict(model.named_parameters())) == (
+        set(dict(learned.named_parameters())) - {"pos_emb.weight"}
+    )
+    assert sum(p.numel() for p in learned.parameters()) - sum(
+        p.numel() for p in model.parameters()
+    ) == max_len * HIDDEN
+
+    # 公式：pe[pos, 2i] = sin(pos / 10000^(2i/hidden))，pe[pos, 2i+1] = cos(...)。
+    # 容差 1e-5：float32 下 sin/cos 的参数最大到 63 rad，实测最大误差 8.8e-7。
+    pe = model._sinusoidal_pos_encoding(
+        64, device=torch.device("cpu"), dtype=torch.float32
+    )
+    assert pe.shape == (64, HIDDEN)
+    for pos in (0, 1, 17, 63):
+        for i in range(HIDDEN // 2):
+            angle = pos / (10000 ** (2 * i / HIDDEN))
+            assert abs(pe[pos, 2 * i].item() - math.sin(angle)) < 1e-5
+            assert abs(pe[pos, 2 * i + 1].item() - math.cos(angle)) < 1e-5
+    # pos=0 行固定为 [0, 1, 0, 1, ...]。
+    assert torch.equal(pe[0, 0::2], torch.zeros(HIDDEN // 2))
+    assert torch.equal(pe[0, 1::2], torch.ones(HIDDEN // 2))
+
+    # T=64 > max_len=8 可前向；同一输入两次前向逐位一致（无随机性）。
+    x64 = _rand((2, 64, D), 40)
+    with torch.no_grad():
+        mu_a, lv_a = model(x64)
+        mu_b, lv_b = model(x64)
+    assert mu_a.shape == (2, 64, D) and lv_a.shape == (2, 64, D)
+    assert torch.isfinite(mu_a).all() and torch.isfinite(lv_a).all()
+    assert torch.equal(mu_a, mu_b) and torch.equal(lv_a, lv_b)
+    # T=64 与 T=65 两种长度都能跑通（长度泛化；sinusoidal 按 T 动态生成）。
+    with torch.no_grad():
+        mu65, lv65 = model(_rand((2, 65, D), 41))
+    assert mu65.shape == (2, 65, D) and lv65.shape == (2, 65, D)
+
+    # max_len 上限校验只对 learned 生效：同样 T=9 在 learned 下仍抛 ValueError。
+    learned_trained = _trained_like(seed=21, max_len=max_len)
+    with pytest.raises(ValueError, match="max_len"):
+        learned_trained(_rand((1, max_len + 1, D), 42))
+
+    # 位置信息确实进入网络：置换 token 后，输出不等于原输出的同置换。
+    x = _rand((2, max_len, D), 43)
+    perm = torch.tensor([7, 0, 6, 1, 5, 2, 4, 3])
+    inv = torch.argsort(perm)
+    with torch.no_grad():
+        mu_p0, _ = model(x)
+        mu_p1, _ = model(x[:, perm])
+    assert (mu_p1[:, inv] - mu_p0).abs().max().item() > 1e-6
+
+    # hidden 为奇数：最后一维置 0（不报错），前向正常。
+    torch.manual_seed(0)
+    odd = SGTModel(
+        4, hidden=17, n_layers=1, n_heads=1, max_len=4, pos_encoding="sinusoidal"
+    )
+    pe_odd = odd._sinusoidal_pos_encoding(5)
+    assert pe_odd.shape == (5, 17)
+    assert (pe_odd[:, -1] == 0).all(), "hidden 为奇数时最后一维应置 0"
+    with torch.no_grad():
+        mu_odd, _ = odd(_rand((1, 5, 4), 44))
+    assert mu_odd.shape == (1, 5, 4)
+
+    # 非法 pos_encoding 快速失败。
+    for bad in ("rope", "Learned", ""):
+        with pytest.raises(ValueError, match="pos_encoding"):
+            _model(pos_encoding=bad)
+
+
+# --------------------------------------------------------------------------- #
+# 19. A1：pos_encoding="none"（无位置编码，同样不受 max_len 限制）
+# --------------------------------------------------------------------------- #
+def test_19_pos_encoding_none_length_generalization():
+    max_len = 8
+    model = _trained_like(seed=22, max_len=max_len, pos_encoding="none")
+    assert model.pos_emb is None
+    assert all("pos_emb" not in name for name, _ in model.named_parameters())
+
+    x64 = _rand((2, 64, D), 50)
+    with torch.no_grad():
+        mu_a, lv_a = model(x64)
+        mu_b, lv_b = model(x64)
+    assert mu_a.shape == (2, 64, D) and lv_a.shape == (2, 64, D)
+    assert torch.equal(mu_a, mu_b) and torch.equal(lv_a, lv_b)
+    # 刚超过 max_len 的 T=9 也可前向。
+    with torch.no_grad():
+        mu9, _ = model(_rand((1, max_len + 1, D), 51))
+    assert mu9.shape == (1, max_len + 1, D)
+
+    # 无位置信息的直接证据：双向 Transformer 对 token 置换等变，即把输出按同一置换
+    # 排回后与原输出一致。容差 1e-5：置换只改变注意力求和的顺序，float32 非结合性
+    # 造成 ~3.6e-7 的差异。
+    x = _rand((2, max_len, D), 52)
+    perm = torch.tensor([7, 0, 6, 1, 5, 2, 4, 3])
+    inv = torch.argsort(perm)
+    with torch.no_grad():
+        mu_p0, lv_p0 = model(x)
+        mu_p1, lv_p1 = model(x[:, perm])
+    assert torch.allclose(mu_p1[:, inv], mu_p0, atol=1e-5)
+    assert torch.allclose(lv_p1[:, inv], lv_p0, atol=1e-5)
+
+
+# --------------------------------------------------------------------------- #
+# 20. 三个新选项与既有 final_norm / sigma_max / 零初始化头的组合
+# --------------------------------------------------------------------------- #
+def test_20_options_combined_with_final_norm_and_clamps():
+    torch.manual_seed(0)  # 固定默认初始化，使本测试与文件内其它测试的执行顺序无关
+    model = SGTModel(
+        16,
+        hidden=16,
+        n_layers=1,
+        n_heads=2,
+        max_len=8,
+        sigma_init=0.01,
+        sigma_max=0.02,
+        sigma_floor=0.005,
+        mu_scale=1.0,
+        pos_encoding="sinusoidal",
+    )
+    assert model.final_norm is not None  # 默认 final_norm=True
+    assert model.pos_emb is None
+    assert model.mu_scale == 1.0
+    assert model.sigma_floor == 0.005
+    assert model.log_sigma_floor2 == math.log(0.005**2)
+    assert model.log_sigma_max2 == math.log(0.02**2)
+
+    # 随机头权重 + 极端 sigma 头 bias：同时触发 mu_scale 与 sigma_floor。
+    _fill_head_weights(model, seed=7, scale=0.2)
+    with torch.no_grad():
+        model.head.bias[model.d :].fill_(-50.0)
+    x = _rand((2, 64, 16), 60)  # T=64 > max_len=8
+    mask = torch.ones(2, 64, dtype=torch.bool)
+    mask[0, 50:] = False
+    with torch.no_grad():
+        mu, log_sigma2 = model(x, attention_mask=mask)
+        sigma = torch.exp(0.5 * log_sigma2)
+    assert mu.shape == (2, 64, 16) and log_sigma2.shape == (2, 64, 16)
+    assert mu.abs().max().item() < 1.0
+    assert (sigma >= 0.005 - 1e-9).all() and (sigma <= 0.02 + 1e-9).all()
+    assert torch.isfinite(mu).all() and torch.isfinite(log_sigma2).all()
+
+    # 该 mu_scale 断言非平凡：同权重、mu_scale=None 时原始 |µ| 超过 1。
+    raw = SGTModel(
+        16, hidden=16, n_layers=1, n_heads=2, max_len=8, sigma_init=0.01,
+        sigma_max=0.02, sigma_floor=0.005, pos_encoding="sinusoidal",
+    )
+    raw.load_state_dict(model.state_dict())
+    with torch.no_grad():
+        mu_raw, _ = raw(x, attention_mask=mask)
+    assert mu_raw.abs().max().item() > 1.0
+
+    # 上界与下界同时生效：bias 设大时 σ 停在 sigma_max（仍有限、仍 <1 的 µ）。
+    with torch.no_grad():
+        model.head.bias[model.d :].fill_(50.0)
+        mu_high, lv_high = model(x, attention_mask=mask)
+    sigma_high = torch.exp(0.5 * lv_high)
+    assert (sigma_high <= 0.02 + 1e-9).all()
+    assert torch.isfinite(mu_high).all() and torch.isfinite(lv_high).all()
+    assert mu_high.abs().max().item() < 1.0

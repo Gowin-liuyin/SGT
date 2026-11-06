@@ -1,0 +1,33 @@
+# M8a Utility 配置：论文 §7（CONFORMANCE CF-31 / GAP-6）的 8 个 benchmark。
+#
+# 论文协议（§7, p.8–10）：
+#   - 8 个任务：Arc Challenge、Arc Easy、OpenbookQA、PIQA、TruthfulQA、IFEval、
+#     **MMLU 0-shot**、**HellaSwag 10-shot**；Utility = 8 个任务相对目标模型的平均
+#     百分点差（CF-32）。
+#   - 任务名用 lm-evaluation-harness 0.4.13 的注册名（truthfulqa_mc2 = TruthfulQA MC2）。
+#
+# 复现选择（SPEC A12；论文未给）：
+#   - limit = 100：每个任务抽 100 条（降规模）。**注意：lm-eval 的 limit 对 MMLU 是
+#     per-subtask**——MMLU 是 57 个子任务组成的 group，limit=100 表示**每个子任务**各 100 条，
+#     总样本 ≈ 57 × 100 ≈ 5,700（不是 MMLU 总共 100 条）。JSON 的 meta.n_samples 记录实际值。
+#   - max_len_fallback = error：SGT 的 max_len（训练时 256）小于 prompt 长度时的缺省行为。
+#     论文要求 8 任务全部可测；本机 SGT 只训练到 256 token，HellaSwag 10-shot 的 prompt
+#     通常 >256 token，会触发超长。正式跑 8 任务前请先把 SGT 的 max_len 提到 ≥1024
+#     （见交付报告「待确认」），或显式改为 skip 并把这个偏差写进结果。
+#
+# 用法：
+#   .venv-lm/bin/python experiments/run_utility.py \
+#     --model .models/llama-3.2-1b-instruct --config configs/utility.yaml \
+#     --batch-size 4 --device mps --out results/utility_base.json
+limit: 100
+num_fewshot: 0  # 全局缺省 shot；按任务的覆盖写在 tasks.<name>.num_fewshot
+max_len_fallback: error
+tasks:
+  arc_challenge: {num_fewshot: 0}
+  arc_easy: {num_fewshot: 0}
+  openbookqa: {num_fewshot: 0}
+  piqa: {num_fewshot: 0}
+  truthfulqa_mc2: {num_fewshot: 0}
+  ifeval: {num_fewshot: 0}
+  mmlu: {num_fewshot: 0}  # 0-shot；limit=100 是 per-subtask（57 个子任务各 100 条）
+  hellaswag: {num_fewshot: 10}  # 论文 §7：HellaSwag 10-shot

@@ -38,6 +38,7 @@ MODULES: list[tuple[str, str]] = [
     ("m8b", "pii"),
     ("m9", "large"),
     ("s1", "security"),
+    ("c1", "conformance"),
     ("m10", "report"),
 ]
 

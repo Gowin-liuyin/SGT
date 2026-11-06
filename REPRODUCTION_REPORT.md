@@ -20,7 +20,7 @@
    在**同等 utility 损失**（≈−19…−20pp）下，SGT 的 NN 攻击成功率 0.25–2.25%，远低于常数噪声 σ=0.1 的 99.85%（方向支持论文机制）；
    但所有 SGT 都工作在 utility 崩坏区，且按论文自己的 A7-MI 指标并不优于同噪声水平的常数噪声（1.82–2.24 vs 1.01）——**“保效用下的信息论保护”未复现**（F34）。
 4. **70B 实验（Table 2）不可执行**，只交付脚本与启动命令（D4，M9 BLOCKED）。
-5. 声明核对表 40 条：**14 VERIFIED / 3 FALSIFIED / 23 BLOCKED / 0 UNKNOWN**。
+5. 声明核对表 42 条：**15 VERIFIED / 3 FALSIFIED / 24 BLOCKED / 0 UNKNOWN**。
 
 ## 1. 复现范围
 
@@ -60,6 +60,7 @@
 | M8b | PUPA NN/BeamClean + PII-Ratio | PASS | 基线 FR=0、PII-Ratio=1.0 |
 | M9 | 大模型启动脚本（不执行） | PASS（执行 BLOCKED） | `exit 3 + status=blocked`，不加载 70B |
 | S1 | 安全模型与攻击（NN/MRP/BeamClean/威胁模型） | PASS | 基线 FR=0、BC≈NN、`fr_by_r[1]==nn_fr`、噪声新鲜性 |
+| C1 | 逐行一致性审计（GAP-1..GAP-10 关闭） | PASS | `docs/CONFORMANCE.md`、`results/gate_c1_conformance.json` |
 | M10 | 报告 + claim 表 + 回归 | PASS | 本文件 |
 
 ### 3.1 三处论文缺陷（详见 FINDINGS）
@@ -157,6 +158,28 @@ Fig.4（常数高斯噪声，2000 token；ε 用 Δ=embedding 范数 p99=1.1267�
 5. **安全语义的保留**：论文把 A7 量称为 MI（F30），因此“信息论保护”的严格表述无法成立；PAC-Adv 只能当代理指标。白盒对手（持有 SGT 权重）未测试，论文也不假设。
 6. **实现缺陷（已修）**：`SGTEmbedding` 原先每次前向重置噪声种子，违反“stochastic”定义；改为 `fresh_noise=True` 后，utility 变化 −20.57→−21.73pp（在 limit=50 抽样误差内），S1 门禁 `c-fresh-noise` 锁定该性质（F33）。
 
+
+### 4.6 逐行一致性修复后的可达性实验（2026-11-06）
+
+按 `docs/CONFORMANCE.md` 关闭全部 10 个 GAP 后（宽 2048 的 SGT、`final_norm`、有界 µ/σ、sinusoidal 位置、bf16 混合精度、SymTTR 选 checkpoint、MRP 独立校准集、8 任务 per-task fewshot、加载器读 `config.sgt`），做了系统性搜索。所有 run 共用：Llama-3.2-1B（bf16 LM + fp32 SGT）、OpenOrca 前 20,000 条、T=256、B=1、σ ∈ [0.005, 0.02]。
+
+| 设置 | 步数 | NN-FR | Utility(5 任务) |
+|---|---|---|---|
+| 无 SGT（基线） | — | 0.00 | 0 |
+| 常数噪声 σ=0.01 | — | 0.00 | −1.67pp |
+| 有界 SGT，µ 上界 0.02/元素（‖µ‖≤0.9），α_acs=10 | 300 | 0.00 | **−14.81pp** |
+| 同上，α_acs=200 | 300 | 3.11 | — |
+| µ 上界 0.1/元素（‖µ‖≤4.5），α_acs=200 | 300 / 1500 | 76.67 | **−21.27pp** |
+| 全损失（MI+AbsCos+Norm），µ 上界 0.1 | 600 | 80.44 | **−21.70pp** |
+| µ 上界 1.0/元素（‖µ‖≈45，tanh 饱和） | 300 | 99.56 | 效用崩坏 |
+
+结论（C42 = BLOCKED）：
+1. **无隐私点也损失 14.8pp**：‖µ‖≈0.9 的位移没有翻转任何最近邻（NN-FR=0），却已让 Utility 降 14.8pp——训练收敛到“全局平移”这一退化解（对 LM 有害、对攻击无用）。
+2. **有隐私点一律 −21pp**：NN-FR 76.7/80.4 时 Utility −21.3/−21.7pp，与常数噪声的坏工作点持平。
+3. **论文工作点（−0.01pp, 94.9%）未达**：在本机 0.1% 量级的优化预算（1500 步 × B=1）内不可达。需要论文级预算与论文未给的超参（F12/A12）才能判断是“训练不足”还是“声明过强”。
+
+这组实验把 C23/C27 的 BLOCKED 从“没试够”升级为“试过并量化了差距”：`results/conformance_sweep.json`。
+
 ## 5. 论文问题清单
 
 见 `docs/FINDINGS.md`：F0（无官方代码）、F1–F5（公式排印）、F8–F11（MI 归约/因子）、F12–F14（超参/ε 缺失）、F15–F16（文字与表值矛盾）、F21（MI 估计器未定义）、F27（PAC 界语义）、**F29（Eq 6 不是上界）**、**F30（MI 不是 MI）**、**F31（Eq 12 发散）**、**F32（降规模下 Utility 未复现）**。
@@ -169,9 +192,9 @@ Fig.4（常数高斯噪声，2000 token；ε 用 Δ=embedding 范数 p99=1.1267�
 
 | 判定 | 数量 | 条目 |
 |---|---|---|
-| VERIFIED | 14 | C1–C3、C5–C7、C21、C24、C32、C34、C36–C39 |
+| VERIFIED | 15 | C1–C3、C5–C7、C21、C24、C32、C34、C36–C39、C41 |
 | FALSIFIED | 3 | C4（Eq 6 不是上界）、C31（结论与 Table 1 自相矛盾，F16）、C35（MI 不是 MI） |
-| BLOCKED | 23 | C8–C20、C22、C23、C25–C30、C33、C40 |
+| BLOCKED | 24 | C8–C20、C22、C23、C25–C30、C33、C40、C42 |
 | UNKNOWN | 0 | — |
 
 ## 8. 复跑方式

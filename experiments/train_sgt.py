@@ -114,6 +114,38 @@ def _build_train_config(
     return train_config, train_raw, variant
 
 
+def _resolve_sgt_options(sgt_raw: dict[str, Any]) -> dict[str, Any]:
+    """解析 ``sgt:`` 段里 :class:`SGTModel` 的 4 个结构超参（A1 / A21）。
+
+    全部按 yaml 原值透传，缺省回落到 ``SGTModel`` 默认值：
+    ``final_norm=True`` / ``mu_scale=None`` / ``sigma_floor=None`` / ``pos_encoding="learned"``。
+    ``pos_encoding`` 的取值校验与 ``mu_scale`` / ``sigma_floor`` 的数值校验都由模型负责。
+    """
+    return {
+        "final_norm": sgt_raw.get("final_norm", True),
+        "mu_scale": sgt_raw.get("mu_scale"),
+        "sigma_floor": sgt_raw.get("sigma_floor"),
+        "pos_encoding": sgt_raw.get("pos_encoding", "learned"),
+    }
+
+
+def _build_sgt_model(
+    d: int, sgt_raw: dict[str, Any], *, sigma_min: float = 1e-6
+) -> SGTModel:
+    """按 yaml ``sgt:`` 段构造 SGTModel（唯一构造入口，便于测试捕获 kwargs）。"""
+    return SGTModel(
+        d,
+        hidden=int(sgt_raw.get("hidden", 512)),
+        n_layers=int(sgt_raw.get("n_layers", 2)),
+        n_heads=int(sgt_raw.get("n_heads", 4)),
+        ffn_mult=int(sgt_raw.get("ffn_mult", 4)),
+        max_len=int(sgt_raw.get("max_len", 512)),
+        sigma_init=float(sgt_raw.get("sigma_init", 1.0)),
+        sigma_min=sigma_min,
+        **_resolve_sgt_options(sgt_raw),
+    )
+
+
 def _load_lm(model_name: str, *, device: torch.device, dtype: torch.dtype):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -239,15 +271,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # SGT 初始化由 seed 决定（训练内部的采样另有显式 Generator）。
     torch.manual_seed(train_config.seed)
     try:
-        sgt = SGTModel(
-            d,
-            hidden=int(sgt_raw.get("hidden", 512)),
-            n_layers=int(sgt_raw.get("n_layers", 2)),
-            n_heads=int(sgt_raw.get("n_heads", 4)),
-            ffn_mult=int(sgt_raw.get("ffn_mult", 4)),
-            max_len=int(sgt_raw.get("max_len", 512)),
-            sigma_init=float(sgt_raw.get("sigma_init", 1.0)),
-            sigma_min=train_config.sigma_min,
+        sgt = _build_sgt_model(
+            d, sgt_raw, sigma_min=train_config.sigma_min
         ).to(device=device, dtype=torch_dtype)
     except Exception as exc:
         return _fail(f"构造 SGTModel 失败: {type(exc).__name__}: {exc}")
@@ -270,6 +295,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "model": model_name,
         "device": args.device,
         "elapsed_seconds": elapsed,
+        # A1 / A21：SGT 结构超参的实际生效值（键名与 yaml 的 sgt: 段一致）。
+        "config_echo": {"sgt": _resolve_sgt_options(sgt_raw)},
         **result,
     }
     out_path = Path(args.out or f"results/train_{args.variant}.json")

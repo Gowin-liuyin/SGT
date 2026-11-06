@@ -75,6 +75,13 @@
 | C39 | §6.2、Table 3 | 语言感知的 BeamClean 与 NN 攻击强度相当（BC-FR ≈ NN-FR） | PUPA n=5/T=24：无保护基线 NN 0.0 / BC 0.0；abscos SGT NN 100.0 / BC 100.0 | **VERIFIED**（小样本；自建 BeamClean，D5） | `results/pupa_baseline_beamclean.json`、`results/pupa_abscos_beamclean.json` |
 | C40 | §6.1、Fig 3、Table 1 | CosSim 训练的 SGT 会把信息“洗白”到远端秩：NN-FR 99.98% 但 MRP-FR 仅 3.21% | 我们 CosSim 变体：NN-FR 99.75%、MRP-FR 99.50%（$r^*=210$，最远 bin 质量 1.81%）；远端攻击成功率≈0 | **BLOCKED**（现象未复现：训练未收敛到反极性，见 F32/F34） | `results/attack_cossim.json`、`results/fig3_ranksh.json` |
 
+## 七、逐行一致性与可达性（C1 / 2026-11-06）
+
+| id | 论文出处 | 论文主张 | 复现值 | 判定 | 证据 |
+|---|---|---|---|---|---|
+| C41 | §3–§7 全文 | 复现实现与论文逐行一致 | `docs/CONFORMANCE.md` 列出 CF-01..CF-36；审计发现 10 个未声明偏差（GAP-1..GAP-10），已全部关闭：SGT 宽度可配/有界 µ、σ（A21）、sinusoidal 位置（A1）、bf16 混合精度（A22）、SymTTR 选 checkpoint、MRP 独立校准集、8 任务 per-task fewshot、--skip-eval、加载器读 `config.sgt` | **VERIFIED** | `results/gate_c1_conformance.json`、`results/gate_m7_ablation.json`、`results/gate_m8a_utility.json` |
+| C42 | Table 1 Utility 列 + §7.2 | SGT 在几乎不损失 Utility 的前提下取得 NN-FR 81–93% | 关闭全部 GAP 后的系统性搜索（有界 µ∈{0.02,0.05,0.1,1.0}/元素、α_acs∈{10,200}、300–2000 步、宽 2048、sinusoidal、bf16）：**任何 NN-FR≥3% 的设置 Utility 都 ≈ −21pp**；NN-FR 76.67/80.44 时 Utility −21.27/−21.70pp；σ=0.01 常数噪声（Utility −1.67pp）时 NN-FR=0 | **BLOCKED**（本机预算下不可达；量化见 `docs/CONFORMANCE.md` §6.1、报告 §4.6） | `/tmp`→ 已归档为 `results/conformance_sweep.json`；`results/utility_baseline_l50.json` |
+
 ## 判定口径
 
 - **VERIFIED**：本仓库命令可复跑，证据 JSON 与论文值在 SPEC §9 阈值内，或命题在数学上被严格验证。

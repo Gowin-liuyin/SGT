@@ -1,44 +1,89 @@
-# M6/M7 消融训练配置（SPEC §5, A12；Table 1 的六种 loss 组合）。
+# M6/M7 消融训练配置（SPEC §5, A12；Table 1 的六种 loss 组合；审计 GAP-5）。
 #
-# 说明：
-# - 论文未给出 lr / batch / steps / α_i 等超参；下列数值是复现选择（A12），
-#   必须原样写入结果 JSON，且不得当作论文值引用。
-# - 论文协议：OpenOrca 15% 训练（D2 降规模为 max_examples 子集）、Llama 3.2 1B Instruct。
-# - SGT 结构见 SPEC A1；`ffn_mult` 是 SGTModel 的 FFN 倍数，`max_len` 为 SGT 支持的最大长度
-#   （数据 train.max_len=128，SGT 留出余量）。
+# 值来源逐项标注（审计要求：论文值不得与复现选择混写）：
+#
+# 来自论文（§7, p.8–10）：
+#   - 训练集 Open-Orca/OpenOrca；训练比例 **15%**（= 635,089 条；CF-29）。
+#     本机降规模见 data.max_examples，实际比例由 run_ablation.py 的 paper_scale 块写入 JSON。
+#   - 目标模型 **Llama 3.2 1B Instruct**（unsloth/Llama-3.2-1B-Instruct；DEVIATION D1）。
+#   - 混淆质量在 Alpaca 上评估（CF-30）。
+#   - 模型选择准则 **SymTTR**（§7："select the best performer based on SymTTR"；CF-33）。
+#   - 每个消融变体训练于 1×A100 80GB ≈ 6 小时（CF-34）；本机降规模见 §7 报告。
+#
+# 复现选择（SPEC A12；论文未给这些数值，**不得当作论文值引用**）：
+#   - lr / batch_size / max_len / steps / σ 初值、σ 上界、α_i；
+#   - selection.every / selection.calibration_examples（论文只说按 SymTTR 选，未给节奏）；
+#   - eval.calibration_fraction（GAP-4 / SPEC A8：MRP 的 r* 用独立校准集，论文未给比例）。
+#
+# GAP-5（训练规模，SPEC §5 / CF-29 / CF-34）：
+#   - data.max_examples = 20,000：本机上限。占论文子集 635,089 的 3.15%，
+#     占 OpenOrca 全量 4,233,927 的 0.47%（比例按实际数据总量在 JSON 的 paper_scale 现算）。
+#   - steps = 2,000、batch_size = 1：**2,000 个序列**参与训练 = 本地 20,000 条的 10%、
+#     论文子集的 0.31%（不是 2 万条各训一遍；如需覆盖完整本地子集，steps 应为 20,000）。
+#   - max_len = 256、B = 1：16GB 机器上显存可控（T=384 会触发 swap，实测 >10 min/变体）。
+#   - lm_dtype：GAP-5/A22 的混合精度声明（LM bf16 + SGT fp32）。run_ablation 会先用微模型
+#     跑 1 步 train_sgt 探测；本机不支持（或训练侧契约未就绪）时**显式**退回 float32 并
+#     把原因写进结果 JSON 的 config_echo.model.lm_dtype（绝不静默改变精度）。
+#   - 代价：SGT 只对 ≤256 token 的序列有定义，Utility 中 HellaSwag 10-shot 会超长
+#     （用 run_utility.py --max-len-fallback skip 记录为 skipped_too_long；论文协议要求
+#     8 任务全部可用，需把 train.max_len/sgt.max_len 提到 ≥1024，见交付报告「待确认」）。
 model: unsloth/Llama-3.2-1B-Instruct
 d: 2048
 
 sgt:
+  # A1（论文只说 "modeled as transformers"，未给宽度）：512 是复现选择。
+  # GAP-1 由模型/训练侧负责；若 SGTModel 的默认宽度改为 d=2048，应删掉这里的覆盖。
   hidden: 512
   n_layers: 2
   n_heads: 4
   ffn_mult: 4
-  # 与 train.max_len 一致：可学习位置编码只在训练长度内被训练，
-  # 评测 prompt 超过该长度时 SGT 无定义（M8 会显式报错而不是静默外推）。
+  # 与 train.max_len 一致：可学习位置编码只在训练长度内被训练，评测 prompt 超过该长度时
+  # SGT 无定义（run_utility.py 会显式报错/按 --max-len-fallback 记录，而不是静默外推）。
   max_len: 256
   sigma_init: 1.0
+  # A21 / GAP-3：Σθ 的上界（σ ≤ 0.05）。Eq (12) 的 Comp.Entr. 按字面无下界、训练发散
+  # （F31），有界参数化是让该行可产有限结果的声明性实现选择；其余变体统一使用同一上界。
+  # 0.05 是复现选择（论文未给）。
+  sigma_max: 0.05
+  # A1 / A21 的结构超参（论文未给，均为声明性实现选择）：final_norm = 输出头前 LayerNorm；
+  # mu_scale = µθ 的 tanh 有界尺度；sigma_floor = Σθ 的下界（与 sigma_max 对称）；
+  # pos_encoding = sinusoidal 位置编码（非可学习，不受 max_len 限制）。
+  final_norm: true
+  mu_scale: 1.0
+  sigma_floor: 0.005
+  pos_encoding: sinusoidal
 
 train:
-  steps: 250
+  steps: 2000
   # 注意：PyYAML 把 `1e-4` 解析成字符串，写成 `1.0e-4` 才是 float（数值相同）。
-  lr: 1.0e-4
-  # B=1、T=256：在 16GB 机器上训练显存可控（T=384 会触发 swap，实测拖慢到 >10min/变体）。
-  # 论文未给 batch/长度（A12）；代价是 SGT 只对 ≤256 token 的序列有定义，
-  # Utility 评测因此只覆盖 prompt 长度在 256 以内的任务（HellaSwag 10-shot 判 BLOCKED）。
+  lr: 1.0e-3
   batch_size: 1
   max_len: 256
+  # GAP-5：LM 侧精度（A22 混合精度）。SGT 恒为 fp32；不支持时脚本显式退回 float32。
+  lm_dtype: bfloat16
   seed: 0
   grad_clip: 1.0
 
 data:
   dataset: Open-Orca/OpenOrca
-  frac: 0.15
-  max_examples: 4000
+  frac: 0.15  # 论文协议的比例（只作记录；实际条数见 data.max_examples）
+  max_examples: 20000
+
+# GAP-7：每 50 步用 Alpaca 前 50 条算 SymTTR-100，取最优 checkpoint 做最终评测。
+# 校准集与最终评测集**不重叠**（最终评测用其后的 Alpaca 条），避免选择泄漏。
+selection:
+  enabled: true
+  every: 50
+  calibration_examples: 50
+
+# GAP-4（SPEC A8）：评测 token 按 0.25 切成 calibration / test；MRP 的 r* 只从
+# calibration 的秩直方图取众数，所有指标只在 test 上算。calibration < 100 token 直接报错。
+eval:
+  calibration_fraction: 0.25
 
 # Table 1 的六种消融（loss 项子集取自 {"mi","acs","mnp","cge","bcs"}）。
 # alphas：Eq (11) 的 α1..α3。论文只给 α_i ∈ R+（A12）；这里取 α1 = 1/d = 4.8828125e-4，
-# 即 MI 损失按特征维平均（与论文把 MI 报成 “feature level” 的口径一致），
+# 即 MI 损失按特征维平均（与论文把 MI 报成 "feature level" 的口径一致），
 # 否则 Eq (8) 的 Σ_j 展开使 L_MI ~ O(d) ≫ L_U，优化会被 MI 采样噪声主导。
 alphas:
   mi: 4.8828125e-4

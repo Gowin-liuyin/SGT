@@ -602,9 +602,17 @@ def load_attack_sgt(
 ) -> tuple[torch.nn.Module, dict[str, Any]]:
     """载入客户端私有的 SGT（``torch.load(..., weights_only=False)["sgt"]``）。
 
-    结构优先由 checkpoint 的 ``config["sgt"]`` 交叉校验，其余由 state_dict 形状推断
-    （``run_pupa.load_sgt_from_checkpoint``）；``n_heads`` 无法由形状推断，按
-    CLI > ``config["sgt"]["n_heads"]`` > 4 的顺序取，并记录来源。
+    重建统一走 :func:`run_pupa.load_sgt_from_checkpoint`：**优先**用 checkpoint 的
+    ``config["sgt"]`` 重建（含 ``final_norm`` / ``mu_scale`` / ``sigma_floor`` /
+    ``pos_encoding`` / ``sigma_max`` 等无参数但改变前向行为的选项），state_dict 形状只作
+    一致性校验；无 config 的旧 checkpoint 按形状推断（``mu_scale`` / ``sigma_floor``
+    推断不出 → ``None``，meta 标记 ``inferred_unparameterized_options=True``）。
+
+    ``n_heads`` 无法由形状推断：``--sgt-n-heads`` 显式给出的值覆盖 checkpoint config，
+    未给时取 ``config["sgt"]["n_heads"]``，再默认 4。
+
+    返回的 meta 记录实际使用的 ``pos_encoding`` / ``final_norm`` / ``mu_scale`` /
+    ``sigma_floor`` 及其来源，供结果 JSON 追溯。
     """
     path = Path(ckpt_path)
     if not path.is_file():
@@ -618,34 +626,20 @@ def load_attack_sgt(
             f"{path} 缺少 'sgt' state_dict（要求 torch.load(...)[ 'sgt' ]）"
         )
     config = payload.get("config") or {}
-    sgt_config = config.get("sgt") if isinstance(config, Mapping) else None
-    if not isinstance(sgt_config, Mapping):
-        sgt_config = payload.get("sgt_config") if isinstance(payload.get("sgt_config"), Mapping) else {}
-    if n_heads is not None:
-        heads, heads_source = int(n_heads), "cli"
-    elif sgt_config.get("n_heads") is not None:
-        heads, heads_source = int(sgt_config["n_heads"]), "config"
-    else:
-        heads, heads_source = 4, "default"
-
-    sgt, meta = load_sgt_from_checkpoint(
-        path, device=device, dtype=torch.float32, d=int(table.shape[1]), n_heads=heads
-    )
     if isinstance(config, Mapping) and config.get("d") is not None:
         if int(config["d"]) != int(table.shape[1]):
             raise ValueError(
-                f"checkpoint config 的 d={config['d']} 与 LM hidden_size={int(table.shape[1])} 不一致"
+                f"checkpoint config 的 d={config['d']} 与 LM hidden_size="
+                f"{int(table.shape[1])} 不一致"
             )
-    for key in ("hidden", "n_layers", "ffn_mult", "max_len"):
-        if sgt_config.get(key) is None:
-            continue
-        if int(sgt_config[key]) != int(meta[key]):
-            raise ValueError(
-                f"checkpoint config['sgt'][{key!r}]={sgt_config[key]} 与 state_dict 推断的 "
-                f"{key}={meta[key]} 不一致"
-            )
-    meta["n_heads_source"] = heads_source
-    meta["config_sgt"] = dict(sgt_config)
+
+    sgt, meta = load_sgt_from_checkpoint(
+        path,
+        device=device,
+        dtype=torch.float32,
+        d=int(table.shape[1]),
+        n_heads=n_heads,
+    )
     sgt.eval()
     for parameter in sgt.parameters():
         parameter.requires_grad_(False)

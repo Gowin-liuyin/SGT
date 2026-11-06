@@ -24,11 +24,14 @@ wrapper 对同一输入的连续两次调用会得到不同噪声。``fresh_nois
 
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import numbers
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch import nn
@@ -38,10 +41,19 @@ from .sampling import sample_sgt
 
 __all__ = [
     "SGTEmbedding",
+    "build_sgt_from_state",
     "install_sgt_embedding",
     "load_sgt_for_lm",
+    "sgt_config_from_payload",
     "utility_scores",
 ]
+
+#: ``SGTModel.__init__`` 中带默认值的参数（checkpoint 缺键时回落到这些默认值）。
+_SGT_DEFAULTS: dict[str, Any] = {
+    name: parameter.default
+    for name, parameter in inspect.signature(SGTModel.__init__).parameters.items()
+    if name != "self" and parameter.default is not inspect.Parameter.empty
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -272,9 +284,62 @@ def _read_hidden_size(model_path: Path) -> int:
 #: checkpoint 里可能包裹 state_dict 的顶层键，按此顺序尝试解包。
 _WRAPPER_KEYS = ("state_dict", "sgt")
 
+#: ``config["sgt"]`` 中会用于重建 :class:`SGTModel` 的键（其余键一律忽略，不报错）。
+_SGT_CONFIG_KEYS = frozenset(
+    {
+        "hidden",
+        "n_layers",
+        "n_heads",
+        "ffn_mult",
+        "max_len",
+        "pos_encoding",
+        "sigma_init",
+        "sigma_min",
+        "sigma_max",
+        "sigma_floor",
+        "mu_scale",
+        "dropout",
+        "pos_emb_init_std",
+        "final_norm",
+    }
+)
 
-def _read_state_dict(ckpt_path: Path) -> dict:
-    """读取 SGT state_dict，依次接受三种封装。
+#: 无法从 state_dict 推断的“无参数但改变前向行为”选项；config 缺失时只能取默认值。
+#: ``pos_encoding`` 只能区分 learned / 非 learned（"sinusoidal" 与 "none" 的 state 相同），
+#: ``sigma_max`` 与 ``mu_scale`` / ``sigma_floor`` 一样不改变参数形状。
+_UNPARAMETERIZED_OPTION_KEYS = ("mu_scale", "sigma_floor", "sigma_max", "pos_encoding")
+
+
+def sgt_config_from_payload(payload: Any) -> dict[str, Any]:
+    """从 checkpoint 顶层对象里取出 ``config["sgt"]``（或旧式顶层 ``sgt_config``）。
+
+    ``experiments/run_ablation.py`` 保存 ``{"sgt": state_dict, "config": {...}}``，其中
+    ``config["sgt"]`` 是 yaml 的 ``sgt:`` 段原样（含 ``final_norm`` / ``mu_scale`` /
+    ``sigma_floor`` / ``pos_encoding`` 等**无参数但改变前向行为**的选项，以及 hidden /
+    n_layers / n_heads / ffn_mult / max_len）。本函数只取出这个子映射，其余 config 键
+    （``train_config`` / ``eval`` / ...）忽略。
+
+    兼容旧式顶层 ``sgt_config``；两者都没有（裸 state_dict，或只含 ``{"sgt": ...}`` 的旧
+    checkpoint）时返回 ``{}``，调用方只能按 state_dict 形状推断（见
+    :func:`build_sgt_from_state`）。
+    """
+    if not isinstance(payload, Mapping):
+        return {}
+    config = payload.get("config")
+    if isinstance(config, Mapping):
+        nested = config.get("sgt")
+        if isinstance(nested, Mapping):
+            return dict(nested)
+    legacy = payload.get("sgt_config")
+    if isinstance(legacy, Mapping):
+        return dict(legacy)
+    return {}
+
+
+def _read_checkpoint(ckpt_path: Path) -> tuple[dict, dict[str, Any]]:
+    """读取 SGT checkpoint，返回 ``(state_dict, config["sgt"])``。
+
+    state_dict 依次接受三种封装：
 
     1. 裸 state_dict（顶层直接含 ``input_proj.weight``）；
     2. ``{"state_dict": <state_dict>}``；
@@ -282,11 +347,13 @@ def _read_state_dict(ckpt_path: Path) -> dict:
        ``experiments/run_ablation.py`` 的训练器格式；``optimizer`` / ``step`` /
        ``config`` 等额外键被忽略）。
 
-    其余结构一律 :class:`ValueError`，错误信息列出已尝试的封装形式。
+    config 由 :func:`sgt_config_from_payload` 取出（无 config 的旧 checkpoint 返回空
+    dict）。其余结构一律 :class:`ValueError`，错误信息列出已尝试的封装形式。
     """
     if not ckpt_path.is_file():
         raise FileNotFoundError(f"SGT checkpoint 不存在: {ckpt_path}")
     obj = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+    sgt_config = sgt_config_from_payload(obj)
     # 顺序：裸 state_dict 优先，其次 {"state_dict": ...}，最后 {"sgt": ...}。
     if isinstance(obj, dict) and not isinstance(
         obj.get("input_proj.weight"), torch.Tensor
@@ -304,10 +371,17 @@ def _read_state_dict(ckpt_path: Path) -> dict:
             f"{ckpt_path} 缺少 input_proj.weight，不是 SGTModel state_dict；"
             f"已尝试的封装：{tried}"
         )
-    return obj
+    return obj, sgt_config
 
 
-def _count_encoder_layers(state: dict, default: int) -> int:
+def _read_state_dict(ckpt_path: Path) -> dict:
+    """读取 SGT state_dict（封装兼容性见 :func:`_read_checkpoint`）。"""
+    return _read_checkpoint(ckpt_path)[0]
+
+
+def _count_encoder_layers(
+    state: Mapping[str, torch.Tensor], default: int | None
+) -> int | None:
     indices = set()
     for key in state:
         parts = key.split(".")
@@ -317,6 +391,301 @@ def _count_encoder_layers(state: dict, default: int) -> int:
     return max(indices) + 1 if indices else default
 
 
+def _infer_sgt_architecture(
+    state: Mapping[str, torch.Tensor],
+) -> dict[str, int | None]:
+    """从 state_dict 的键/形状反推 SGT 架构（``n_heads`` 不可反推）。
+
+    Returns:
+        ``{"d", "hidden", "n_layers", "ffn_mult", "max_len"}``。``ffn_mult`` 在缺少
+        ``encoder.layers.0.linear1.weight`` 时为 ``None``；``max_len`` 只在
+        ``pos_emb.weight`` 存在（``pos_encoding="learned"``）时可得，否则为 ``None``
+        （由 config 或 ``SGTModel`` 默认值决定）。
+    """
+    input_proj = state.get("input_proj.weight")
+    if not isinstance(input_proj, torch.Tensor):
+        raise ValueError(
+            f"SGT state_dict 缺少 input_proj.weight；收到的前 3 个键：{list(state)[:3]}"
+        )
+    if input_proj.dim() != 2:
+        raise ValueError(
+            f"input_proj.weight 必须为 2 维，实际 {tuple(input_proj.shape)}"
+        )
+    hidden, d = (int(value) for value in input_proj.shape)
+    head = state.get("head.weight")
+    if isinstance(head, torch.Tensor) and int(head.shape[0]) != 2 * d:
+        raise ValueError(
+            f"head.weight 形状 {tuple(head.shape)} 与 input_proj 的 d={d} "
+            f"不一致（应为 [2d, hidden]）"
+        )
+    linear1 = state.get("encoder.layers.0.linear1.weight")
+    ffn_mult = None
+    if isinstance(linear1, torch.Tensor):
+        rows = int(linear1.shape[0])
+        if rows % hidden:
+            raise ValueError(
+                f"encoder.layers.0.linear1.weight 的 {rows} 行不能被 hidden={hidden} "
+                "整除，无法推断 ffn_mult"
+            )
+        ffn_mult = rows // hidden
+    pos_emb = state.get("pos_emb.weight")
+    return {
+        "d": d,
+        "hidden": hidden,
+        "n_layers": _count_encoder_layers(state, None),
+        "ffn_mult": ffn_mult,
+        "max_len": int(pos_emb.shape[0]) if isinstance(pos_emb, torch.Tensor) else None,
+    }
+
+
+def _sgt_load_failure_hint(
+    model: SGTModel, state: Mapping[str, torch.Tensor], message: str = ""
+) -> str:
+    """strict load 失败时按缺失/多余的键指出最可能不匹配的选项。"""
+    expected = set(model.state_dict())
+    actual = set(state)
+    missing = expected - actual
+    unexpected = actual - expected
+    hints: list[str] = []
+    if (
+        "pos_emb.weight" in missing
+        or "pos_emb.weight" in unexpected
+        or "pos_emb" in message
+    ):
+        hints.append(
+            "pos_encoding 不匹配（'learned' 需要 pos_emb.weight，"
+            "'sinusoidal'/'none' 不需要）"
+        )
+    if (
+        any(key.startswith("final_norm.") for key in missing | unexpected)
+        or "final_norm" in message
+    ):
+        hints.append("final_norm 不匹配（True 需要 final_norm.weight / final_norm.bias）")
+    if not hints:
+        hints.append(
+            "检查 n_heads（无法由形状推断）/ hidden / n_layers / ffn_mult / max_len "
+            "是否与训练时一致"
+        )
+    return "；".join(hints)
+
+
+def build_sgt_from_state(
+    state: Mapping[str, torch.Tensor],
+    sgt_config: Mapping[str, Any] | None = None,
+    *,
+    n_heads: int | None = None,
+    n_heads_precedence: str = "config",
+    fallbacks: Mapping[str, Any] | None = None,
+) -> tuple[SGTModel, dict[str, Any]]:
+    """按 checkpoint 的 ``config["sgt"]`` 重建 :class:`SGTModel`，形状推断只作校验。
+
+    重建规则（config 指 :func:`sgt_config_from_payload` 取出的 ``config["sgt"]``）：
+
+    1. 架构键 ``hidden`` / ``n_layers`` / ``ffn_mult`` / ``max_len``：config 有的用
+       config，并与 state_dict 形状推断值**交叉校验**（不一致报 :class:`ValueError`，
+       不静默）；config 缺失的用形状推断；形状也推不出（``ffn_mult``、非 ``learned``
+       位置编码的 ``max_len``）时用 ``fallbacks`` 或 ``SGTModel`` 默认值。
+    2. ``pos_encoding`` / ``final_norm``：config 有的用 config，并与 state_dict 键
+       （``pos_emb.weight`` / ``final_norm.weight``）交叉校验；config 缺失时按键推断
+       （有 ``pos_emb.weight`` → ``"learned"``，否则 ``"sinusoidal"``；``final_norm``
+       按键是否存在）。
+    3. 标量选项 ``sigma_init`` / ``sigma_min`` / ``sigma_max`` / ``sigma_floor`` /
+       ``mu_scale`` / ``dropout`` / ``pos_emb_init_std``：config 有的用 config（显式
+       ``null`` 表示无界，只允许 ``sigma_max`` / ``sigma_floor`` / ``mu_scale``），缺失
+       的用 ``fallbacks`` 或 ``SGTModel`` 默认值。``mu_scale`` / ``sigma_floor`` /
+       ``sigma_max`` 无法从 state_dict 推断，无 config 时退化为模型默认（前两者
+       ``None``）——调用方必须检查 ``meta["inferred_unparameterized_options"]``。
+    4. ``n_heads``：不改变参数形状，strict load 发现不了头数不符，因此 config 提供时
+       优先用 config（``n_heads_precedence="config"``）；``"caller"`` 时调用方值优先
+       （``run_pupa`` 的 ``--sgt-heads`` 覆盖语义）。二者冲突且 config 生效时发
+       :class:`RuntimeWarning`。
+
+    加载用 ``strict=True``；失败时错误信息按缺失/多余的键指出可能不匹配的选项
+    （``pos_encoding`` / ``final_norm`` 等）。
+
+    Returns:
+        ``(model, meta)``：``model`` 在 CPU、fp32、eval 模式；``meta`` 记录实际使用的
+        架构、上述选项及其来源（``config`` / ``shape`` / ``inferred`` / ``caller`` /
+        ``default``）。
+    """
+    if n_heads_precedence not in ("config", "caller"):
+        raise ValueError(
+            f"n_heads_precedence 必须为 'config' 或 'caller'，实际 {n_heads_precedence!r}"
+        )
+    config = dict(sgt_config or {})
+    fallback_values = dict(fallbacks or {})
+    inferred = _infer_sgt_architecture(state)
+    unknown = sorted(str(key) for key in set(config) - _SGT_CONFIG_KEYS)
+    kwargs: dict[str, Any] = {}
+    sources: dict[str, str] = {}
+
+    # 1) 架构键：config 优先，state_dict 形状只作交叉校验。
+    for key in ("hidden", "n_layers", "ffn_mult", "max_len"):
+        if key in config and config[key] is not None:
+            value = int(config[key])
+            inferred_value = inferred[key]
+            if inferred_value is not None and value != int(inferred_value):
+                raise ValueError(
+                    f"checkpoint config['sgt'][{key!r}]={value} 与 state_dict 形状推断出的 "
+                    f"{key}={inferred_value} 不一致；config 与权重不是同一次训练的产物？"
+                )
+            kwargs[key] = value
+            sources[key] = "config"
+        elif inferred[key] is not None:
+            kwargs[key] = int(inferred[key])
+            sources[key] = "shape"
+        else:
+            kwargs[key] = fallback_values.get(key, _SGT_DEFAULTS[key])
+            sources[key] = "caller" if key in fallback_values else "default"
+
+    # 2) 无参数但改变前向行为的选项：config 优先，并与 state_dict 键交叉校验。
+    has_pos_emb = isinstance(state.get("pos_emb.weight"), torch.Tensor)
+    if config.get("pos_encoding") is not None:
+        pos_encoding = config["pos_encoding"]
+        if bool(pos_encoding == "learned") != has_pos_emb:
+            raise ValueError(
+                f"checkpoint config['sgt']['pos_encoding']={pos_encoding!r} 与 state_dict "
+                f"{'含' if has_pos_emb else '不含'} pos_emb.weight 不一致"
+            )
+        kwargs["pos_encoding"] = pos_encoding
+        sources["pos_encoding"] = "config"
+    else:
+        kwargs["pos_encoding"] = "learned" if has_pos_emb else "sinusoidal"
+        sources["pos_encoding"] = "inferred"
+
+    has_final_norm = "final_norm.weight" in state
+    if config.get("final_norm") is not None:
+        final_norm = config["final_norm"]
+        if not isinstance(final_norm, bool):
+            raise ValueError(
+                f"checkpoint config['sgt']['final_norm'] 必须是 bool，实际 {final_norm!r}"
+            )
+        if final_norm != has_final_norm:
+            raise ValueError(
+                f"checkpoint config['sgt']['final_norm']={final_norm} 与 state_dict "
+                f"{'含' if has_final_norm else '不含'} final_norm.weight 不一致"
+            )
+        kwargs["final_norm"] = final_norm
+        sources["final_norm"] = "config"
+    else:
+        kwargs["final_norm"] = has_final_norm
+        sources["final_norm"] = "inferred"
+
+    # 3) 标量选项：config 原值透传；显式 null（= 无界）只允许在三个有界参数上。
+    for key in (
+        "sigma_init",
+        "sigma_min",
+        "sigma_max",
+        "sigma_floor",
+        "mu_scale",
+        "dropout",
+        "pos_emb_init_std",
+    ):
+        if key not in config:
+            kwargs[key] = fallback_values.get(key, _SGT_DEFAULTS[key])
+            sources[key] = "caller" if key in fallback_values else "default"
+            continue
+        value = config[key]
+        if value is None:
+            if key not in ("sigma_max", "sigma_floor", "mu_scale"):
+                raise ValueError(
+                    f"checkpoint config['sgt'][{key!r}] 不能为 null（只有 sigma_max / "
+                    "sigma_floor / mu_scale 允许用 null 表示无界）"
+                )
+            kwargs[key] = None
+            sources[key] = "config"
+            continue
+        try:
+            kwargs[key] = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"checkpoint config['sgt'][{key!r}]={value!r} 不是数值"
+            ) from exc
+        sources[key] = "config"
+
+    # 4) n_heads：不改变参数形状，strict load 无法发现头数不符，只能靠 config。
+    config_n_heads = config.get("n_heads")
+    if config_n_heads is not None and (
+        n_heads is None or n_heads_precedence == "config"
+    ):
+        config_n_heads = int(config_n_heads)
+        if n_heads is not None and int(n_heads) != config_n_heads:
+            warnings.warn(
+                f"调用方请求的 n_heads={int(n_heads)} 与 checkpoint "
+                f"config['sgt']['n_heads']={config_n_heads} 不一致；按 checkpoint config 重建",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+        kwargs["n_heads"] = config_n_heads
+        sources["n_heads"] = "config"
+    elif n_heads is not None:
+        kwargs["n_heads"] = int(n_heads)
+        sources["n_heads"] = "explicit"
+    else:
+        kwargs["n_heads"] = _SGT_DEFAULTS["n_heads"]
+        sources["n_heads"] = "default"
+
+    try:
+        model = SGTModel(int(inferred["d"]), **kwargs)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"按 checkpoint config 重建 SGTModel 失败（d={inferred['d']}，"
+            f"kwargs={kwargs}）：{exc}"
+        ) from exc
+
+    try:
+        model.load_state_dict(dict(state), strict=True)
+    except RuntimeError as exc:
+        hint = _sgt_load_failure_hint(model, state, str(exc))
+        raise ValueError(
+            f"无法把 checkpoint state_dict 加载到重建的 SGTModel（d={model.d}, "
+            f"hidden={model.hidden}, n_layers={model.n_layers}, n_heads={model.n_heads}, "
+            f"ffn_mult={model.ffn_mult}, max_len={model.max_len}, "
+            f"pos_encoding={model.pos_encoding!r}, "
+            f"final_norm={model.final_norm is not None}）：{exc}；可能原因：{hint}"
+        ) from exc
+    model.eval()
+
+    missing_options: list[str] = []
+    for key in _UNPARAMETERIZED_OPTION_KEYS:
+        # mu_scale / sigma_floor / sigma_max 的显式 null 表示「已知无界」，算 config
+        # 提供；pos_encoding 的 null 等于没给（只能按键推断）。
+        if key in ("mu_scale", "sigma_floor", "sigma_max"):
+            provided = key in config
+        else:
+            provided = config.get(key) is not None
+        if not provided:
+            missing_options.append(key)
+    meta: dict[str, Any] = {
+        "d": model.d,
+        "hidden": model.hidden,
+        "n_layers": model.n_layers,
+        "n_heads": model.n_heads,
+        "n_heads_source": sources["n_heads"],
+        "n_heads_requested": None if n_heads is None else int(n_heads),
+        "ffn_mult": model.ffn_mult,
+        "max_len": model.max_len,
+        "pos_encoding": model.pos_encoding,
+        "final_norm": model.final_norm is not None,
+        "mu_scale": model.mu_scale,
+        "sigma_floor": model.sigma_floor,
+        "sigma_init": model.sigma_init,
+        "sigma_min": model.sigma_min,
+        "sigma_max": model.sigma_max,
+        "pos_emb_init_std": model.pos_emb_init_std,
+        "pos_encoding_source": sources["pos_encoding"],
+        "architecture_sources": {
+            key: sources[key] for key in ("hidden", "n_layers", "ffn_mult", "max_len")
+        },
+        "option_sources": sources,
+        "inferred_unparameterized_options": bool(missing_options),
+        "missing_unparameterized_options": missing_options,
+        "config_sgt": dict(config),
+        "config_keys_ignored": unknown,
+    }
+    return model, meta
+
+
 def load_sgt_for_lm(
     model_path: str | Path,
     ckpt_path: str | Path,
@@ -324,31 +693,46 @@ def load_sgt_for_lm(
     device: str = "cpu",
     hidden: int = 512,
     n_layers: int = 2,
-    n_heads: int = 4,
+    n_heads: int | None = None,
     sigma_init: float = 1.0,
-) -> SGTModel:
+    return_meta: bool = False,
+) -> SGTModel | tuple[SGTModel, dict[str, Any]]:
     """读取目标模型 config.json 的 ``hidden_size``，加载 SGT checkpoint。
 
     checkpoint 兼容三种封装：裸 state_dict、``{"state_dict": ...}``，以及
     ``sgt.train.train_sgt`` / ``experiments/run_ablation.py`` 保存的
-    ``{"sgt": ...}`` 训练器格式（多余键被忽略，见 :func:`_read_state_dict`）。
+    ``{"sgt": ...}`` 训练器格式（``run_ablation`` 还带 ``config["sgt"]``，见下）。
+
+    重建规则（见 :func:`build_sgt_from_state`）：**优先**用 checkpoint 的
+    ``config["sgt"]`` 重建 :class:`SGTModel`（未知键忽略、缺失键用模型默认），state_dict
+    形状推断只作一致性校验（不一致报 :class:`ValueError`，不静默）。没有 config 的旧
+    checkpoint 按形状推断：``final_norm`` / ``pos_encoding`` 可由键推断，``mu_scale`` /
+    ``sigma_floor`` **无法**推断 → 取默认 ``None``，此时 meta 的
+    ``inferred_unparameterized_options`` 为 ``True``（调用方应优先使用带 config 的
+    checkpoint）。
 
     维度校验：checkpoint 的 ``input_proj.weight`` 第 1 维（d）必须等于目标模型的
     ``hidden_size``，否则抛 :class:`ValueError`（调用方据此显式失败，不得回退基线）。
 
-    ``hidden`` / ``n_layers`` 在 checkpoint 能推断出真实形状时以 checkpoint 为准
-    （训练产物可能不是默认宽度；不一致时发 ``RuntimeWarning``）——否则
-    ``load_state_dict`` 会因形状不符失败。``n_heads`` 无法由 state_dict 推断
-    （参数形状与头数无关），必须由调用方给出；``max_len`` 取自 ``pos_emb`` 行数，
-    保证与训练时的位置编码长度一致。
+    ``hidden`` / ``n_layers`` / ``sigma_init`` 只在 checkpoint 没有对应 config 时使用；
+    checkpoint 的实际架构与之不一致时发 ``RuntimeWarning`` 并按 checkpoint 构造。
+    ``n_heads`` 无法由 state_dict 推断（参数形状与头数无关）：checkpoint config 有则用
+    config（与调用方给的 ``n_heads`` 不一致时发 ``RuntimeWarning``），否则用调用方值，
+    再默认 4。
+
+    Args:
+        return_meta: 为 ``True`` 时返回 ``(model, meta)``；``meta`` 记录实际使用的
+            ``pos_encoding`` / ``final_norm`` / ``mu_scale`` / ``sigma_floor``、架构与各项
+            来源，供结果 JSON 追溯。
 
     Returns:
-        放到 ``device`` 并切到 eval 模式的 :class:`SGTModel`。
+        放到 ``device`` 并切到 eval 模式的 :class:`SGTModel`；``return_meta=True`` 时返回
+        ``(model, meta)``。
     """
     model_path = Path(model_path)
     ckpt_path = Path(ckpt_path)
     d = _read_hidden_size(model_path)
-    state = _read_state_dict(ckpt_path)
+    state, sgt_config = _read_checkpoint(ckpt_path)
 
     input_proj = state["input_proj.weight"]
     if input_proj.dim() != 2:
@@ -366,37 +750,26 @@ def load_sgt_for_lm(
             f"SGT checkpoint 的 head.weight 形状 {tuple(head.shape)} 与 d={d} 不一致"
         )
 
-    ckpt_hidden = int(input_proj.shape[0])
-    ckpt_layers = _count_encoder_layers(state, n_layers)
-    if (ckpt_hidden, ckpt_layers) != (hidden, n_layers):
-        warnings.warn(
-            f"SGT checkpoint 的实际架构为 hidden={ckpt_hidden}, n_layers={ckpt_layers}，"
-            f"与请求的 hidden={hidden}, n_layers={n_layers} 不一致；按 checkpoint 构造",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-        hidden, n_layers = ckpt_hidden, ckpt_layers
-
-    pos_emb = state.get("pos_emb.weight")
-    max_len = int(pos_emb.shape[0]) if isinstance(pos_emb, torch.Tensor) else 512
-
-    sgt = SGTModel(
-        d,
-        hidden=hidden,
-        n_layers=n_layers,
+    sgt, meta = build_sgt_from_state(
+        state,
+        sgt_config,
         n_heads=n_heads,
-        max_len=max_len,
-        sigma_init=sigma_init,
+        fallbacks={"sigma_init": sigma_init},
     )
-    try:
-        sgt.load_state_dict(state)
-    except RuntimeError as exc:
-        raise ValueError(
-            f"无法把 {ckpt_path} 加载到 SGTModel(d={d}, hidden={hidden}, "
-            f"n_layers={n_layers}, n_heads={n_heads}, max_len={max_len}): {exc}"
-        ) from exc
+    for key, requested in (("hidden", hidden), ("n_layers", n_layers)):
+        if int(requested) != int(meta[key]):
+            warnings.warn(
+                f"SGT checkpoint 的实际架构为 {key}={meta[key]}，与请求的 {requested} "
+                "不一致；按 checkpoint 构造",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
     sgt.to(device)
     sgt.eval()
+    meta = {"ckpt": str(ckpt_path), "model_path": str(model_path), **meta}
+    if return_meta:
+        return sgt, meta
     return sgt
 
 

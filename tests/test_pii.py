@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -39,6 +40,7 @@ for _path in (str(REPO_ROOT / "src"), str(REPO_ROOT / "experiments")):
 from sgt import pii  # noqa: E402
 from sgt.model import SGTModel  # noqa: E402
 
+import run_attack_suite  # noqa: E402
 import run_pupa  # noqa: E402
 
 
@@ -597,3 +599,179 @@ def test_08_run_pupa_eval_rejects_silent_beamclean_skip(small_table, char_tokeni
             max_len=24,
             progress=False,
         )
+
+
+# --------------------------------------------------------------------------- #
+# 9-10. checkpoint 重建：config["sgt"] 优先；无 config 时按 state_dict 推断
+# --------------------------------------------------------------------------- #
+def _option_rich_sgt(
+    *,
+    pos_encoding: str = "sinusoidal",
+    final_norm: bool = True,
+    mu_scale: float | None = 0.5,
+    sigma_floor: float | None = 0.01,
+    sigma_max: float | None = 0.05,
+    d: int = 8,
+    hidden: int = 16,
+    n_heads: int = 2,
+    max_len: int = 16,
+) -> SGTModel:
+    """输出头非零的 SGT（让 µ 的 tanh 夹取与 σ 的夹取在重建后必须逐位复现）。"""
+    torch.manual_seed(0)
+    model = SGTModel(
+        d,
+        hidden=hidden,
+        n_layers=1,
+        n_heads=n_heads,
+        ffn_mult=2,
+        max_len=max_len,
+        pos_encoding=pos_encoding,
+        final_norm=final_norm,
+        mu_scale=mu_scale,
+        sigma_floor=sigma_floor,
+        sigma_max=sigma_max,
+    ).eval()
+    generator = torch.Generator().manual_seed(1)
+    with torch.no_grad():
+        model.head.weight.copy_(
+            0.1 * torch.randn(model.head.weight.shape, generator=generator)
+        )
+        model.head.bias[:d].copy_(0.05 * torch.randn(d, generator=generator))
+        model.head.bias[d:].fill_(math.log(0.5**2))
+    return model
+
+
+def _assert_same_outputs(
+    reference: SGTModel, loaded: torch.nn.Module, d: int = 8
+) -> None:
+    x = torch.randn(2, 5, d, generator=torch.Generator().manual_seed(7))
+    with torch.no_grad():
+        ref_mu, ref_log_sigma2 = reference(x)
+        loaded_mu, loaded_log_sigma2 = loaded(x)
+    assert torch.equal(ref_mu, loaded_mu)
+    assert torch.equal(ref_log_sigma2, loaded_log_sigma2)
+
+
+def test_09_sgt_loaders_use_checkpoint_config_options(tmp_path, small_table):
+    d, hidden, n_heads, max_len = 8, 16, 2, 16
+    source = _option_rich_sgt(d=d, hidden=hidden, n_heads=n_heads, max_len=max_len)
+    sgt_config = {
+        "hidden": hidden,
+        "n_layers": 1,
+        "n_heads": n_heads,
+        "ffn_mult": 2,
+        "max_len": max_len,
+        "sigma_init": 1.0,
+        "sigma_max": 0.05,
+        "sigma_floor": 0.01,
+        "mu_scale": 0.5,
+        "pos_encoding": "sinusoidal",
+        "final_norm": True,
+    }
+    path = tmp_path / "ckpt_config.pt"
+    torch.save(
+        {
+            "sgt": source.state_dict(),
+            "config": {"sgt": sgt_config, "d": d},
+            "seed": 0,
+            "variant": "unit_test",
+        },
+        path,
+    )
+
+    # 加载器 2/3：run_pupa（PUPA 评测）
+    loaded, meta = run_pupa.load_sgt_from_checkpoint(path, n_heads=n_heads)
+    assert loaded.pos_encoding == "sinusoidal"
+    assert loaded.final_norm is not None
+    assert loaded.mu_scale == 0.5
+    assert loaded.sigma_floor == 0.01
+    assert loaded.sigma_max == 0.05
+    assert loaded.max_len == max_len
+    assert meta["pos_encoding"] == "sinusoidal"
+    assert meta["final_norm"] is True
+    assert meta["mu_scale"] == 0.5
+    assert meta["sigma_floor"] == 0.01
+    assert meta["sigma_max"] == 0.05
+    assert meta["pos_encoding_source"] == "config"
+    assert meta["inferred_unparameterized_options"] is False
+    assert meta["n_heads_source"] == "cli"
+    assert meta["config_sgt"] == sgt_config
+    _assert_same_outputs(source, loaded, d)
+
+    # 加载器 3：run_attack_suite（安全评测）
+    attack_sgt, attack_meta = run_attack_suite.load_attack_sgt(
+        path, table=small_table, device=torch.device("cpu"), n_heads=n_heads
+    )
+    assert attack_sgt.pos_encoding == "sinusoidal"
+    assert attack_sgt.final_norm is not None
+    assert attack_sgt.mu_scale == 0.5
+    assert attack_sgt.sigma_floor == 0.01
+    assert attack_sgt.sigma_max == 0.05
+    assert attack_meta["pos_encoding"] == "sinusoidal"
+    assert attack_meta["final_norm"] is True
+    assert attack_meta["mu_scale"] == 0.5
+    assert attack_meta["sigma_floor"] == 0.01
+    assert attack_meta["pos_encoding_source"] == "config"
+    assert attack_meta["inferred_unparameterized_options"] is False
+    _assert_same_outputs(source, attack_sgt, d)
+
+    # config 与 state_dict 形状不一致：报错而不是静默重建
+    bad_config = dict(sgt_config)
+    bad_config["n_layers"] = 2
+    bad_path = tmp_path / "ckpt_bad_layers.pt"
+    torch.save({"sgt": source.state_dict(), "config": {"sgt": bad_config}}, bad_path)
+    with pytest.raises(ValueError, match="n_layers"):
+        run_pupa.load_sgt_from_checkpoint(bad_path, n_heads=n_heads)
+    with pytest.raises(ValueError, match="n_layers"):
+        run_attack_suite.load_attack_sgt(
+            bad_path, table=small_table, device=torch.device("cpu"), n_heads=n_heads
+        )
+
+
+def test_10_sgt_loaders_infer_options_without_config(tmp_path, small_table):
+    d, hidden, n_heads = 8, 16, 2
+    # 旧式 ckpt：只有 {"sgt": state_dict}，无 config；训练时用的是 sinusoidal + 无
+    # final_norm + 无 µ/σ 界（这些恰好是能从键推断或等于模型默认的组合）。
+    source = _option_rich_sgt(
+        d=d,
+        hidden=hidden,
+        n_heads=n_heads,
+        pos_encoding="sinusoidal",
+        final_norm=False,
+        mu_scale=None,
+        sigma_floor=None,
+        sigma_max=None,
+    )
+    path = tmp_path / "ckpt_old.pt"
+    torch.save({"sgt": source.state_dict(), "step": 3}, path)
+
+    loaded, meta = run_pupa.load_sgt_from_checkpoint(path, n_heads=n_heads)
+    assert loaded.pos_encoding == "sinusoidal"  # 无 pos_emb → 推断为 sinusoidal
+    assert loaded.final_norm is None
+    assert loaded.mu_scale is None  # 无法从 state_dict 推断，取 None
+    assert loaded.sigma_floor is None
+    assert loaded.sigma_max is None
+    assert loaded.max_len == 512  # 无 pos_emb → 取模型默认（sinusoidal 不受 max_len 限制）
+    assert meta["step"] == 3
+    assert meta["pos_encoding"] == "sinusoidal"
+    assert meta["pos_encoding_source"] == "inferred"
+    assert meta["final_norm"] is False
+    assert meta["mu_scale"] is None
+    assert meta["sigma_floor"] is None
+    assert meta["inferred_unparameterized_options"] is True
+    assert "mu_scale" in meta["missing_unparameterized_options"]
+    assert "sigma_floor" in meta["missing_unparameterized_options"]
+    _assert_same_outputs(source, loaded, d)
+
+    attack_sgt, attack_meta = run_attack_suite.load_attack_sgt(
+        path, table=small_table, device=torch.device("cpu"), n_heads=n_heads
+    )
+    assert attack_sgt.pos_encoding == "sinusoidal"
+    assert attack_sgt.final_norm is None
+    assert attack_sgt.mu_scale is None
+    assert attack_sgt.sigma_floor is None
+    assert attack_meta["pos_encoding_source"] == "inferred"
+    assert attack_meta["inferred_unparameterized_options"] is True
+    assert attack_meta["mu_scale"] is None
+    assert attack_meta["sigma_floor"] is None
+    _assert_same_outputs(source, attack_sgt, d)

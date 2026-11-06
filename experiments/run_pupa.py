@@ -70,6 +70,7 @@ from sgt.data import load_pupa, make_batches  # noqa: E402
 from sgt.model import SGTModel  # noqa: E402
 from sgt.pii import pii_ratio, pii_units_recovered, split_pii_units  # noqa: E402
 from sgt.sampling import sample_sgt  # noqa: E402
+from sgt.utility import build_sgt_from_state, sgt_config_from_payload  # noqa: E402
 
 __all__ = [
     "TEXT_FIELD",
@@ -272,34 +273,12 @@ def make_lm_score_fn(lm, *, chunk: int = 0, device=None):
 # --------------------------------------------------------------------------- #
 # SGT checkpoint 载入
 # --------------------------------------------------------------------------- #
-def _infer_sgt_dims(state: Mapping[str, torch.Tensor]) -> dict:
-    """从 state_dict 的键/形状反推 SGT 结构（``n_heads`` 不可反推）。"""
-    required = ("input_proj.weight", "pos_emb.weight", "head.weight")
-    missing = [key for key in required if key not in state]
-    if missing:
-        raise KeyError(
-            f"SGT state_dict 缺少键 {missing}；收到的前 3 个键：{list(state)[:3]}"
-        )
-    hidden, dim = (int(value) for value in state["input_proj.weight"].shape)
-    head_rows = int(state["head.weight"].shape[0])
-    if head_rows != 2 * dim:
-        raise ValueError(
-            f"head.weight 形状 {tuple(state['head.weight'].shape)} 与 input_proj "
-            f"的 d={dim} 不一致（应为 [2d, hidden]）"
-        )
-    layer_ids = {
-        int(key.split(".")[2])
-        for key in state
-        if key.startswith("encoder.layers.") and len(key.split(".")) > 2
-    }
-    ffn_rows = int(state["encoder.layers.0.linear1.weight"].shape[0])
-    return {
-        "d": dim,
-        "hidden": hidden,
-        "n_layers": max(layer_ids) + 1 if layer_ids else 1,
-        "ffn_mult": ffn_rows // hidden,
-        "max_len": int(state["pos_emb.weight"].shape[0]),
-    }
+#: :func:`sgt.utility.build_sgt_from_state` 的 n_heads 来源标签 → 本模块的对外标签。
+_N_HEADS_SOURCE_LABELS = {
+    "explicit": "cli",
+    "config": "checkpoint",
+    "default": "default",
+}
 
 
 def load_sgt_from_checkpoint(
@@ -310,19 +289,28 @@ def load_sgt_from_checkpoint(
     d: int | None = None,
     n_heads: int | None = None,
 ) -> tuple[SGTModel, dict]:
-    """载入 :meth:`sgt.train.train_sgt` 保存的 checkpoint（``{"sgt": state_dict, ...}``）。
+    """载入 SGT checkpoint（``{"sgt": state_dict, "config": {...}}``）。
 
-    结构（d / hidden / n_layers / ffn_mult / max_len）从 state_dict 形状反推；
-    ``n_heads`` 无法从参数形状反推（``in_proj_weight`` 与头数无关）：调用方显式给的
-    ``n_heads`` 优先；未给时取 checkpoint 里的 ``sgt_config["n_heads"]``；都没有则默认 4
-    （与 ``configs/ablation.yaml`` 的 ``sgt.n_heads`` 一致）。来源会记进返回的
-    ``meta["n_heads_source"]``（``"cli"`` / ``"checkpoint"`` / ``"default"``），供结果 JSON
-    声明。反推的其它结构（d / hidden / n_layers / ffn_mult / max_len）来自 state_dict 形状，
-    若与实际训练结构不符，``strict=True`` 的 load 会直接报错。
+    重建规则见 :func:`sgt.utility.build_sgt_from_state`：**优先**用 checkpoint 的
+    ``config["sgt"]``（``experiments/run_ablation.py`` 的保存格式）重建
+    :class:`SGTModel`——包括 ``final_norm`` / ``mu_scale`` / ``sigma_floor`` /
+    ``pos_encoding`` / ``sigma_max`` 等**无参数但改变前向行为**的选项；state_dict 形状
+    只作一致性校验（不一致抛 :class:`ValueError`，不静默）。没有 config 的旧 checkpoint
+    按形状推断：``final_norm`` / ``pos_encoding`` 可由键推断，``mu_scale`` /
+    ``sigma_floor`` 推断不出 → 取默认 ``None``，此时 meta 的
+    ``inferred_unparameterized_options`` 为 ``True``。
+
+    ``n_heads`` 无法从参数形状反推（``in_proj_weight`` 与头数无关），且不影响参数形状，
+    strict load 发现不了头数不符：调用方显式给的 ``n_heads`` 优先（``--sgt-heads``
+    覆盖语义）；未给时取 checkpoint ``config["sgt"]["n_heads"]``；都没有则默认 4。
+    来源记进 ``meta["n_heads_source"]``（``"cli"`` / ``"checkpoint"`` / ``"default"``）。
+
+    ``meta`` 还记录实际使用的 ``pos_encoding`` / ``final_norm`` / ``mu_scale`` /
+    ``sigma_floor`` 及其来源，供结果 JSON 追溯。
 
     Raises:
-        FileNotFoundError / KeyError / ValueError / RuntimeError: 路径、键、形状不符或
-            ``d`` 与实际不一致（不静默加载）。
+        FileNotFoundError / TypeError / ValueError: 路径、键、形状不符，或 ``d`` 与实际
+            不一致、config 与 state_dict 不一致（不静默加载）。
     """
     path = Path(path)
     if not path.exists():
@@ -331,11 +319,13 @@ def load_sgt_from_checkpoint(
     if isinstance(payload, Mapping) and "sgt" in payload:
         state = payload["sgt"]
         step = payload.get("step")
-        extra = payload.get("sgt_config") or {}
-    else:  # 兼容裸 state_dict
+    elif isinstance(payload, Mapping):  # 兼容裸 state_dict
         state = payload
         step = None
-        extra = {}
+    else:
+        raise TypeError(
+            f"checkpoint 必须是 mapping，实际 {type(payload).__name__}"
+        )
     if not isinstance(state, Mapping):
         raise TypeError(f"checkpoint 里的 sgt 必须是 state_dict，实际 {type(state).__name__}")
     state = {
@@ -343,46 +333,28 @@ def load_sgt_from_checkpoint(
         for key, value in state.items()
     }
 
-    dims = _infer_sgt_dims(state)
-    if d is not None and int(dims["d"]) != int(d):
+    model, meta = build_sgt_from_state(
+        state,
+        sgt_config_from_payload(payload),
+        n_heads=n_heads,
+        n_heads_precedence="caller",
+    )
+    if d is not None and int(meta["d"]) != int(d):
         raise ValueError(
-            f"checkpoint 的 d={dims['d']} 与目标 LM 的 hidden_size={int(d)} 不一致"
+            f"checkpoint 的 d={meta['d']} 与目标 LM 的 hidden_size={int(d)} 不一致"
         )
-    if n_heads is not None:
-        heads, n_heads_source = int(n_heads), "cli"
-    elif isinstance(extra, Mapping) and extra.get("n_heads") is not None:
-        heads, n_heads_source = int(extra["n_heads"]), "checkpoint"
-    else:
-        heads, n_heads_source = 4, "default"
 
-    model = SGTModel(
-        dims["d"],
-        hidden=dims["hidden"],
-        n_layers=dims["n_layers"],
-        n_heads=heads,
-        ffn_mult=dims["ffn_mult"],
-        max_len=dims["max_len"],
-    ).to(device=torch.device(device), dtype=dtype)
-    try:
-        model.load_state_dict(dict(state), strict=True)
-    except RuntimeError as exc:  # 形状不匹配多半是 n_heads/n_layers 推断错
-        raise RuntimeError(
-            f"载入 SGT checkpoint 失败（推断结构 {dims}，n_heads={heads}）: {exc}"
-        ) from exc
+    model = model.to(device=torch.device(device), dtype=dtype)
     model.eval()
-
     meta = {
         "path": str(path),
         "step": None if step is None else int(step),
-        "d": int(dims["d"]),
-        "hidden": int(dims["hidden"]),
-        "n_layers": int(dims["n_layers"]),
-        "n_heads": heads,
-        "n_heads_source": n_heads_source,
-        "ffn_mult": int(dims["ffn_mult"]),
-        "max_len": int(dims["max_len"]),
+        **meta,
         "dtype": str(dtype),
     }
+    meta["n_heads_source"] = _N_HEADS_SOURCE_LABELS.get(
+        meta["n_heads_source"], meta["n_heads_source"]
+    )
     return model, meta
 
 

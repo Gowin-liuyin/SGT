@@ -17,6 +17,7 @@ EXPECTED_GATES = {
     "m0_skeleton": "m0", "m1_theory": "m1", "m2_losses": "m2", "m3_model": "m3",
     "m4_metrics": "m4", "m5_data": "m5", "m6_train": "m6", "m7_ablation": "m7",
     "m8a_utility": "m8a", "m8b_pii": "m8b", "m9_large": "m9", "s1_security": "s1",
+    "c1_conformance": "c1",
 }
 
 
@@ -67,7 +68,7 @@ def main() -> int:
         d = json.loads(p.read_text())
         if not d.get("pass"):
             bad.append(f"{name}:{d.get('status')}")
-    g.check("c-upstream-gates", expected="12 个上游门禁 PASS", actual=f"{bad}", passed=not bad)
+    g.check("c-upstream-gates", expected="13 个上游门禁 PASS", actual=f"{bad}", passed=not bad)
 
     # 4) 关键结果文件
     need = ["results/ablation_summary.json", "results/fig3_ranksh.json",
@@ -78,10 +79,10 @@ def main() -> int:
 
     # 5) 状态表：M0..M10 全 PASS
     state = (REPO_ROOT / "REPRO_STATE.md").read_text(encoding="utf-8")
-    status = dict(re.findall(r"^\|\s*([MS]\d+[ab]?)[^|]*\|[^|]*\|\s*(\w[\w ]*?)\s*\|", state, flags=re.M))
+    status = dict(re.findall(r"^\|\s*([MSC]\d+[ab]?)[^|]*\|[^|]*\|\s*(\w[\w ]*?)\s*\|", state, flags=re.M))
     not_pass = {k: v for k, v in status.items() if v.strip() != "PASS"}
     g.check("c-state-all-pass", expected="M0..M10 + S1（含 M8a/M8b）全 PASS", actual=not_pass or status,
-            passed=not not_pass and len(status) == 13)
+            passed=not not_pass and len(status) == 14)
 
     # 6) 回归：fail-fast 自检仍通过（不重跑全部门禁，避免递归）
     proc = subprocess.run([sys.executable, "-m", "gates.run_gates", "--self-test"],

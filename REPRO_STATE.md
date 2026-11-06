@@ -20,7 +20,8 @@
 | M8b PII | M6,M7 | PASS | `results/gate_m8b_pii.json` | PUPA NN + PII-Ratio |
 | M9 大模型脚本 | M8 | PASS | `results/gate_m9_large.json` | 本机执行 BLOCKED（D4） |
 | S1 安全模型与攻击 | M6,M7 | PASS | `results/gate_s1_security.json` | 威胁模型 + NN/MRP/BeamClean + 噪声新鲜性 |
-| M10 报告与回归 | M1..M9,S1 | PASS | `results/gate_m10_report.json` | 40 条 claim 全部有结论 |
+| C1 逐行一致性 | M0..M9 | PASS | `results/gate_c1_conformance.json` | GAP-1..GAP-10 关闭 |
+| M10 报告与回归 | M1..M9,S1,C1 | PASS | `results/gate_m10_report.json` | 42 条 claim 全部有结论 |
 
 **关键结果**
 - PAC-Adv 反解逐位复现 Table 1/2（worst 0.11pp）：`results/gate_m1_theory.json`。

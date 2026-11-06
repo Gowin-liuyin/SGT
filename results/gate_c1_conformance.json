@@ -1,0 +1,140 @@
+{
+  "gate": "c1",
+  "name": "conformance",
+  "module_entry": "docs/CONFORMANCE.md：论文逐行一致性",
+  "checks": [
+    {
+      "id": "c-doc-exists",
+      "expected": true,
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-cf-items",
+      "expected": "CF-01..CF-36 连续",
+      "actual": "CF-01..CF-36 (36)",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-gaps-closed",
+      "expected": "GAP-1..GAP-10 全部 CLOSED",
+      "actual": "found=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] unclosed=[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-results-section",
+      "expected": "含 GAP 关闭后的实验结果表",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-model-options",
+      "expected": "['final_norm', 'mu_scale', 'pos_encoding', 'sigma_floor', 'sigma_max']",
+      "actual": "['final_norm', 'mu_scale', 'pos_encoding', 'sigma_floor', 'sigma_max']",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-runablation-build",
+      "expected": "build_sgt_model 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-select",
+      "expected": "resolve_selection 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-mrp-split",
+      "expected": "resolve_eval_options 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-lm-dtype",
+      "expected": "resolve_lm_dtype 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-skip-eval",
+      "expected": "--skip-eval 在 CLI",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-fewshot",
+      "expected": "parse_task_fewshot 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-merge",
+      "expected": "merge_eval_results 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-shot-group",
+      "expected": "group_by_fewshot 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-max-len-fallback",
+      "expected": "--max-len-fallback 在 CLI",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-loader-config",
+      "expected": "build_sgt_from_state 存在",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-loader-reads-config",
+      "expected": "读取 config['sgt']",
+      "actual": true,
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-utility-8tasks",
+      "expected": "['arc_challenge', 'arc_easy', 'openbookqa', 'piqa', 'truthfulqa_mc2', 'ifeval', 'mmlu', 'hellaswag']",
+      "actual": "missing=[]",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "c-hellaswag-10shot",
+      "expected": "hellaswag num_fewshot=10",
+      "actual": 10,
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "pass": true,
+  "status": "PASS",
+  "timestamp": "2026-11-06T11:34:36+0800",
+  "env": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  }
+}

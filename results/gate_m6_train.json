@@ -13,7 +13,7 @@
     {
       "id": "c-train-runs",
       "expected": "3 finite steps",
-      "actual": "n=3 losses=[33.7013, 36.9674, 37.014]",
+      "actual": "n=3 losses=[33.7013, 37.4706, 37.4348]",
       "pass": true,
       "detail": ""
     },
@@ -27,7 +27,7 @@
     {
       "id": "c-sgt-updated",
       "expected": "全部 SGT 张量都有更新",
-      "actual": "17/17 changed",
+      "actual": "19/19 changed",
       "pass": true,
       "detail": ""
     },
@@ -41,7 +41,7 @@
     {
       "id": "c-determinism",
       "expected": "identical history",
-      "actual": "[33.701308, 36.943294, 36.985587]",
+      "actual": "[33.701308, 37.333708, 37.11579]",
       "pass": true,
       "detail": ""
     },
@@ -69,7 +69,7 @@
     {
       "id": "c-config-echo",
       "expected": "config echoed",
-      "actual": "['steps', 'lr', 'weight_decay', 'grad_clip']",
+      "actual": "['steps', 'lr', 'warmup_steps', 'weight_decay']",
       "pass": true,
       "detail": ""
     },
@@ -83,7 +83,7 @@
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-05T22:04:12+0800",
+  "timestamp": "2026-11-06T11:33:47+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"

@@ -41,14 +41,14 @@
     {
       "id": "c-seqdep",
       "expected": "every position changes > 1e-6",
-      "actual": "min_change=9.590e-05",
+      "actual": "min_change=2.332e-05",
       "pass": true,
-      "detail": "per_pos=[0.0001, 0.0001, 0.0001, 0.0363, 0.0001, 0.0001]"
+      "detail": "per_pos=[0.0, 0.0, 0.0, 0.0087, 0.0, 0.0]"
     },
     {
       "id": "c-posdep",
       "expected": "permuted inputs give different outputs",
-      "actual": "max|diff|=6.328e-02",
+      "actual": "max|diff|=1.963e-02",
       "pass": true,
       "detail": ""
     },
@@ -62,7 +62,7 @@
     {
       "id": "c-grad",
       "expected": "all finite, >=8 tensors nonzero",
-      "actual": "finite=True nonzero=29",
+      "actual": "finite=True nonzero=31",
       "pass": true,
       "detail": ""
     },
@@ -90,14 +90,14 @@
     {
       "id": "c-param-report",
       "expected": "report only",
-      "actual": "7488 params (d=8,hidden=16)",
+      "actual": "7520 params (d=8,hidden=16)",
       "pass": true,
       "detail": ""
     }
   ],
   "pass": true,
   "status": "PASS",
-  "timestamp": "2026-11-05T22:04:00+0800",
+  "timestamp": "2026-11-06T11:33:35+0800",
   "env": {
     "python": "3.12.13",
     "platform": "macOS-26.6.2-arm64-arm-64bit"
