@@ -61,12 +61,12 @@
 | id | 论文要求 | 代码/当前设置 | 状态 |
 |---|---|---|---|
 | CF-28 | 目标模型 Llama 3.2 1B Instruct | `unsloth/Llama-3.2-1B-Instruct`（官方 gated） | DEVIATION(D1)，权重同源、sha256 已验 |
-| CF-29 | 训练集 OpenOrca 的 **15%** | 当前 4000 条（`data.max_examples`） | **DEVIATION(D2) 且偏差过大**：15% = 635,089 条；本机 1 条/步 → 141 h/epoch。**GAP-5：需要把训练规模提高到本机可承受的上限（≥2 万条 / ≥2000 步），并显式量化“占 15% 的比例”** |
+| CF-29 | 训练集 OpenOrca 的 **15%** | 20,000 条（`data.max_examples`），800 步×B=1 → 800 条序列参与训练 | **DEVIATION(D2)**：15% = 635,089 条；本地用 20,000 条（占论文子集 3.15%），实际参与训练 800 条（0.13%）；比例在结果 JSON 的 `paper_scale` 现算 |
 | CF-30 | 混淆质量在 Alpaca 上评估 | `load_alpaca`，200 条 × max_len | EXACT |
 | CF-31 | Utility：Arc Challenge、Arc Easy、OpenbookQA、PIQA、TruthfulQA、IFEval、MMLU 0-shot、HellaSwag 10-shot 八个任务 | `run_utility.py` 用 lm-eval，当前只跑 5–7 个、全部 0-shot、limit 50–100 | **GAP-6：缺 `--num-fewshot` 支持（HellaSwag 10-shot）与 IFEval/MMLU 的正式跑法** |
 | CF-32 | Utility = 八个 benchmark 相对目标模型的**平均**百分点差 | `utility_scores` 对给定任务平均 | EXACT（任务集需按 CF-31 补齐） |
 | CF-33 | "select the best performer based on **SymTTR**" | `run_ablation.py` 只训到固定步数、不选 checkpoint | **GAP-7：需要按 SymTTR 选 checkpoint（论文的模型选择准则）** |
-| CF-34 | 消融模型各训练于 1×A100 80GB ≈ 6 小时 | 250 步 ≈ 5 分钟/变体 | DEVIATION(D2)，需在报告量化算力比 |
+| CF-34 | 消融模型各训练于 1×A100 80GB ≈ 6 小时 | 800 步 ≈ 8 分钟/变体（MPS） | DEVIATION(D2)：算力比 ≈ 1.5–2%，在报告 §4.1 量化 |
 | CF-35 | 大模型：Llama-3.3-70B、Qwen3-32B、DeepSeek-R1-70B；2 epoch 全 OpenOrca；≤0.5% 验证集；64×8×A100；FSDP2×TP | `run_large_models.py` + `configs/large_models.yaml`（只生成启动命令） | DEVIATION(D4)/BLOCKED |
 | CF-36 | PUPA：NN/BeamClean FR + PII-Ratio；BeamClean 只评子集 | `run_pupa.py`；当前 NN 50 条、BeamClean 5 条 | DEVIATION(规模) — 需在报告量化 |
 
